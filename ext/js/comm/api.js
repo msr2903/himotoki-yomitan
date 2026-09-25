@@ -106,6 +106,43 @@ export class API {
     }
 
     /**
+     * @returns {Promise<import('api').ApiReturn<'himotokiGetStatus'>>}
+     */
+    himotokiGetStatus() {
+        return this._invoke('himotokiGetStatus', void 0);
+    }
+
+    /**
+     * @returns {Promise<import('api').ApiReturn<'himotokiSignIn'>>}
+     */
+    himotokiSignIn() {
+        return this._invoke('himotokiSignIn', void 0);
+    }
+
+    /**
+     * @returns {Promise<import('api').ApiReturn<'himotokiSignOut'>>}
+     */
+    himotokiSignOut() {
+        return this._invoke('himotokiSignOut', void 0);
+    }
+
+    /**
+     * @param {import('api').ApiParam<'himotokiGetSaved', 'forceRefresh'>} forceRefresh
+     * @returns {Promise<import('api').ApiReturn<'himotokiGetSaved'>>}
+     */
+    himotokiGetSaved(forceRefresh) {
+        return this._invoke('himotokiGetSaved', {forceRefresh});
+    }
+
+    /**
+     * @param {import('api').ApiParam<'himotokiAddFavorite', 'favorite'>} favorite
+     * @returns {Promise<import('api').ApiReturn<'himotokiAddFavorite'>>}
+     */
+    himotokiAddFavorite(favorite) {
+        return this._invoke('himotokiAddFavorite', {favorite});
+    }
+
+    /**
      * @param {import('api').ApiParam<'updateAnkiNote', 'noteWithId'>} noteWithId
      * @returns {Promise<import('api').ApiReturn<'updateAnkiNote'>>}
      */

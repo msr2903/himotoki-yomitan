@@ -26,6 +26,7 @@ import type * as DictionaryDatabase from './dictionary-database';
 import type * as DictionaryImporter from './dictionary-importer';
 import type * as Environment from './environment';
 import type * as Extension from './extension';
+import type * as Himotoki from './himotoki';
 import type * as Language from './language';
 import type * as Log from './log';
 import type * as Settings from './settings';
@@ -170,6 +171,30 @@ type ApiSurface = {
     isAnkiConnected: {
         params: void;
         return: boolean;
+    };
+    himotokiGetStatus: {
+        params: void;
+        return: Himotoki.Status;
+    };
+    himotokiSignIn: {
+        params: void;
+        return: Himotoki.Status;
+    };
+    himotokiSignOut: {
+        params: void;
+        return: Himotoki.Status;
+    };
+    himotokiGetSaved: {
+        params: {
+            forceRefresh: boolean;
+        };
+        return: Himotoki.SavedSummary;
+    };
+    himotokiAddFavorite: {
+        params: {
+            favorite: Himotoki.FavoriteInput;
+        };
+        return: Himotoki.AddFavoriteResult;
     };
     getAnkiConnectVersion: {
         params: void;

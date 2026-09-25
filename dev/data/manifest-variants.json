@@ -69,7 +69,8 @@
             "declarativeNetRequest",
             "scripting",
             "offscreen",
-            "contextMenus"
+            "contextMenus",
+            "identity"
         ],
         "optional_permissions": [
             "clipboardRead",
@@ -355,6 +356,13 @@
                         "permissions"
                     ],
                     "item": "offscreen"
+                },
+                {
+                    "action": "remove",
+                    "path": [
+                        "permissions"
+                    ],
+                    "item": "identity"
                 },
                 {
                     "action": "delete",
