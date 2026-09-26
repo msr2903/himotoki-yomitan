@@ -552,6 +552,12 @@ function createProfileOptionsUpdatedTestData1() {
             forceSync: false,
             noteDupeCheckFirst: false,
         },
+        himotoki: {
+            enable: false,
+            folderId: '',
+            includeSentence: true,
+            includeUrl: true,
+        },
         sentenceParsing: {
             scanExtent: 200,
             terminationCharacterMode: 'custom',
@@ -707,7 +713,7 @@ function createOptionsUpdatedTestData1() {
             },
         ],
         profileCurrent: 0,
-        version: 77,
+        version: 78,
         global: {
             database: {
                 prefixWildcardsSupported: false,

@@ -38,6 +38,10 @@ Yomitan provides powerful features not available in other browser-based dictiona
 
 **Please visit the [Yomitan Wiki](https://yomitan.wiki) for the most up-to-date usage documentation.**
 
+### Himotoki
+
+This fork can save looked-up words into [Himotoki](https://himotoki.app) (favorites / study), including sentence and URL mining fields. See [docs/himotoki.md](./docs/himotoki.md).
+
 ### Developer Documentation
 
 - Dictionaries

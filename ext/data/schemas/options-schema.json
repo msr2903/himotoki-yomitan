@@ -71,6 +71,7 @@
                             "dictionaries",
                             "parsing",
                             "anki",
+                            "himotoki",
                             "sentenceParsing",
                             "inputs",
                             "clipboard",
@@ -1188,6 +1189,33 @@
                                     "noteDupeCheckFirst": {
                                         "type": "boolean",
                                         "default": false
+                                    }
+                                }
+                            },
+                            "himotoki": {
+                                "type": "object",
+                                "required": [
+                                    "enable",
+                                    "folderId",
+                                    "includeSentence",
+                                    "includeUrl"
+                                ],
+                                "properties": {
+                                    "enable": {
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "folderId": {
+                                        "type": "string",
+                                        "default": ""
+                                    },
+                                    "includeSentence": {
+                                        "type": "boolean",
+                                        "default": true
+                                    },
+                                    "includeUrl": {
+                                        "type": "boolean",
+                                        "default": true
                                     }
                                 }
                             },

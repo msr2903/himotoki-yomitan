@@ -2054,6 +2054,19 @@ button.footer-notification-close-button {
 :root[data-anki-enabled=false] .action-button[data-action=save-note] {
     display: none;
 }
+:root[data-himotoki-enabled=false] .action-button[data-action=save-himotoki],
+:root[data-himotoki-enabled=false] .himotoki-actions-container {
+    display: none;
+}
+.himotoki-actions-container {
+    display: contents;
+}
+.action-button[data-action=save-himotoki].action-button-himotoki-saved .action-icon {
+    opacity: 0.45;
+}
+.icon[data-icon=book] {
+    background-image: url('/images/book.svg');
+}
 
 :root[data-average-frequency=true] .frequency-group-item:not([data-details='Average']) {
     display: none;
