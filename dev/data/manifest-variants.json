@@ -1,6 +1,7 @@
 {
     "manifest": {
         "manifest_version": 3,
+        "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyR5jWNEFnJQXjwSzlImOM1U7P6ayeF2cnb+GVwswsmJN0eU42ekWkSK2xtst0MG21zspz6nk3sxo7yKVxxCSViStlZhNqXwn7v6N7HyrMve372rZjFuVRud3MWrFY4cUqmXV/FzhNoTpsVRVdpl4HnKLlA72vEL4h2XIteu8ostv1dmCctaAc8OCS6YbuaD+cHtk0/HEDv2mu9yFzrPWSAYiAAHGYIP6SaZrheBw7pNuz7casxqJ76ZEDsJpp6wwqaVSDgnXGKKHKamQE78lGH5svvCGdl0NeNXqpB2PiJWSN3gb7LkwFtt8bDEY5RKkjK/2dXOpAuoygTLSK9NBZQIDAQAB",
         "name": "Yomitan Popup Dictionary",
         "version": "$YOMITAN_VERSION",
         "description": "Popup dictionary for language learning",
@@ -191,6 +192,12 @@
             "fileName": "yomitan-firefox.zip",
             "modifications": [
                 {
+                    "action": "delete",
+                    "path": [
+                        "key"
+                    ]
+                },
+                {
                     "action": "set",
                     "path": [
                         "author"
@@ -336,6 +343,12 @@
         {
             "name": "safari",
             "modifications": [
+                {
+                    "action": "delete",
+                    "path": [
+                        "key"
+                    ]
+                },
                 {
                     "action": "set",
                     "path": [

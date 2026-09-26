@@ -22,8 +22,7 @@ If you are not signed in (or sign-in is not set up in your build), the button op
 
 ## Enabling sign-in in a build
 
-Sign-in needs a Google OAuth client in the `himotoki` GCP project:
+Sign-in uses the `himotoki` GCP project's Google **Web client** (the one Firebase Auth's Google provider uses), already set as `GOOGLE_OAUTH_CLIENT_ID` in `ext/js/comm/himotoki-client.js`. It works once the extension's redirect URL is allowed:
 
-1. In the GCP console → **APIs & Services → Credentials**, create (or reuse) an OAuth client of type **Web application**.
-2. Add the redirect URL shown in **Settings → Himotoki** (`https://<extension-id>.chromiumapp.org/`) to its **Authorized redirect URIs**. Each browser and extension ID has its own redirect URL; unpacked builds get an ID derived from their folder path unless the manifest has a fixed `key`.
-3. Set `GOOGLE_OAUTH_CLIENT_ID` in `ext/js/comm/himotoki-client.js` and rebuild.
+1. In the GCP console → **APIs & Services → Credentials**, open the Web client `330567228503-kjfa…`.
+2. Under **Authorized redirect URIs**, add the redirect URL shown in **Settings → Himotoki**. The Chrome and Edge manifests carry a fixed `key`, so unpacked builds always get the ID `nclppdjgkpcgcpfgbecibgibkgpoampc` and the URL `https://nclppdjgkpcgcpfgbecibgibkgpoampc.chromiumapp.org/`. A Web Store listing gets its own ID, which needs its own entry. The private half of the key is only needed to pack a `.crx` and is kept out of the repository.
