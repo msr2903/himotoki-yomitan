@@ -26,11 +26,11 @@ const FIREBASE_API_KEY = 'AIzaSyBWnRUvmoBqDiskcY6krGgNG87vz8bzcnQ';
 const FIREBASE_PROJECT_ID = 'himotoki';
 
 /**
- * Client ID of a "Web application" Google OAuth client in the `himotoki` GCP project.
- * The redirect URL shown in Settings → Himotoki must be added to the client's authorized redirect URIs.
- * Sign-in is unavailable while this is empty.
+ * The `himotoki` GCP project's Google "Web client" — the one Firebase Auth's Google provider uses,
+ * so the ID token it mints is accepted by `signInWithIdp`. The redirect URL shown in
+ * Settings → Himotoki must be added to the client's authorized redirect URIs.
  */
-export const GOOGLE_OAUTH_CLIENT_ID = '';
+export const GOOGLE_OAUTH_CLIENT_ID = '330567228503-kjfajrdp071c6vlfk4ca974bhi2v0mav.apps.googleusercontent.com';
 
 /** Web address used for the no-sign-in quick-add fallback. */
 export const HIMOTOKI_WEB_URL = 'https://himotoki.web.app';
