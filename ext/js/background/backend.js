@@ -19,6 +19,7 @@ import {AccessibilityController} from '../accessibility/accessibility-controller
 import {AnkiConnect} from '../comm/anki-connect.js';
 import {ClipboardMonitor} from '../comm/clipboard-monitor.js';
 import {ClipboardReader} from '../comm/clipboard-reader.js';
+import {HimotokiClient} from '../comm/himotoki-client.js';
 import {Mecab} from '../comm/mecab.js';
 import {YomitanApi} from '../comm/yomitan-api.js';
 import {createApiMap, invokeApiMapHandler} from '../core/api-map.js';
@@ -61,6 +62,8 @@ export class Backend {
         this._environment = new Environment();
         /** @type {AnkiConnect} */
         this._anki = new AnkiConnect();
+        /** @type {HimotokiClient} */
+        this._himotoki = new HimotokiClient();
         /** @type {Mecab} */
         this._mecab = new Mecab();
 
@@ -153,6 +156,11 @@ export class Backend {
             ['getAnkiConnectVersion',        this._onApiGetAnkiConnectVersion.bind(this)],
             ['isAnkiConnected',              this._onApiIsAnkiConnected.bind(this)],
             ['addAnkiNote',                  this._onApiAddAnkiNote.bind(this)],
+            ['himotokiGetStatus',            this._onApiHimotokiGetStatus.bind(this)],
+            ['himotokiSignIn',               this._onApiHimotokiSignIn.bind(this)],
+            ['himotokiSignOut',              this._onApiHimotokiSignOut.bind(this)],
+            ['himotokiGetSaved',             this._onApiHimotokiGetSaved.bind(this)],
+            ['himotokiAddFavorite',          this._onApiHimotokiAddFavorite.bind(this)],
             ['updateAnkiNote',               this._onApiUpdateAnkiNote.bind(this)],
             ['getAnkiNoteInfo',              this._onApiGetAnkiNoteInfo.bind(this)],
             ['injectAnkiNoteMedia',          this._onApiInjectAnkiNoteMedia.bind(this)],
@@ -620,6 +628,31 @@ export class Backend {
     /** @type {import('api').ApiHandler<'addAnkiNote'>} */
     async _onApiAddAnkiNote({note}) {
         return await this._anki.addNote(note);
+    }
+
+    /** @type {import('api').ApiHandler<'himotokiGetStatus'>} */
+    async _onApiHimotokiGetStatus() {
+        return await this._himotoki.getStatus();
+    }
+
+    /** @type {import('api').ApiHandler<'himotokiSignIn'>} */
+    async _onApiHimotokiSignIn() {
+        return await this._himotoki.signIn();
+    }
+
+    /** @type {import('api').ApiHandler<'himotokiSignOut'>} */
+    async _onApiHimotokiSignOut() {
+        return await this._himotoki.signOut();
+    }
+
+    /** @type {import('api').ApiHandler<'himotokiGetSaved'>} */
+    async _onApiHimotokiGetSaved({forceRefresh}) {
+        return await this._himotoki.getSaved(forceRefresh);
+    }
+
+    /** @type {import('api').ApiHandler<'himotokiAddFavorite'>} */
+    async _onApiHimotokiAddFavorite({favorite}) {
+        return await this._himotoki.addFavorite(favorite);
     }
 
     /** @type {import('api').ApiHandler<'updateAnkiNote'>} */

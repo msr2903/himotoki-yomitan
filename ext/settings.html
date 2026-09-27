@@ -37,6 +37,7 @@
             <a href="#text-parsing"     class="button outline-item"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="text-parsing"></span></span><span class="outline-item-label">Text Parsing</span></a>
             <a href="#translation"      class="button outline-item advanced-only"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="translation"></span></span><span class="outline-item-label">Translation</span></a>
             <a href="#anki"             class="button outline-item"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="note-card"></span></span><span class="outline-item-label">Anki</span></a>
+            <a href="#himotoki"         class="button outline-item"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="book"></span></span><span class="outline-item-label">Himotoki</span></a>
             <a href="#clipboard"        class="button outline-item"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="clipboard"></span></span><span class="outline-item-label">Clipboard</span></a>
             <a href="#shortcuts"        class="button outline-item"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="keyboard"></span></span><span class="outline-item-label">Shortcuts</span></a>
             <a href="#backup"           class="button outline-item"><span class="outline-item-left"><span class="outline-item-icon icon" data-icon="backup"></span></span><span class="outline-item-label">Backup</span></a>
@@ -2211,6 +2212,81 @@
             </div>
             <div class="settings-item-right open-panel-button-container">
                 <button type="button" class="icon-button"><span class="icon-button-inner"><span class="icon" data-icon="material-right-arrow"></span></span></button>
+            </div>
+        </div></div>
+    </div>
+
+    <!-- Himotoki -->
+    <div>
+        <div class="heading-container">
+            <div class="heading-container-icon"><span class="icon" data-icon="book"></span></div>
+            <div class="heading-container-left"><h2 id="himotoki"><a href="#himotoki">Himotoki</a></h2></div>
+            <div class="heading-container-right"><a tabindex="0" class="more-toggle more-only heading-link-light" data-parent-distance="3">Info&hellip;</a></div>
+        </div>
+        <div class="heading-description more" hidden>
+            <p>
+                Save looked-up words from Yomitan into your <a href="https://himotoki.app" target="_blank" rel="noopener noreferrer">Himotoki</a> account
+                (favorites / study list), including mining context such as the sentence and page URL — similar to Anki mining.
+                Dictionary lookup stays in Yomitan; Himotoki only stores the card.
+            </p>
+            <p>
+                <a tabindex="0" class="more-toggle" data-parent-distance="3">Less&hellip;</a>
+            </p>
+        </div>
+    </div>
+    <div class="settings-group">
+        <div class="settings-item"><div class="settings-item-inner settings-item-inner-wrappable">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Himotoki account</div>
+                <div class="settings-item-description" id="himotoki-account-status">&hellip;</div>
+                <div class="settings-item-description" id="himotoki-sign-in-unavailable" hidden>
+                    Google sign-in isn't set up in this build. Until it is, the Himotoki button opens a quick-add page on
+                    <a href="https://himotoki.web.app" target="_blank" rel="noopener noreferrer">himotoki.web.app</a> instead.
+                    To enable sign-in, set <code>GOOGLE_OAUTH_CLIENT_ID</code> and register this redirect URL:
+                    <code id="himotoki-redirect-url"></code>
+                </div>
+            </div>
+            <div class="settings-item-right">
+                <button type="button" id="himotoki-sign-in" hidden>Sign in with Google</button>
+                <button type="button" class="low-emphasis" id="himotoki-sign-out" hidden>Sign out</button>
+            </div>
+        </div></div>
+        <div class="settings-item"><div class="settings-item-inner">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Show "Add to Himotoki" button</div>
+                <div class="settings-item-description">Adds a one-click save button to each dictionary entry.</div>
+            </div>
+            <div class="settings-item-right">
+                <label class="toggle"><input type="checkbox" data-setting="himotoki.enable"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+            </div>
+        </div></div>
+        <div class="settings-item"><div class="settings-item-inner settings-item-inner-wrappable">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Save into folder</div>
+                <div class="settings-item-description">Folder for newly saved words. Sign in to choose from your Himotoki folders.</div>
+            </div>
+            <div class="settings-item-right">
+                <select id="himotoki-folder" data-setting="himotoki.folderId">
+                    <option value="">Unfiled</option>
+                </select>
+            </div>
+        </div></div>
+        <div class="settings-item"><div class="settings-item-inner">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Include sentence</div>
+                <div class="settings-item-description">Save the scanned sentence as mining context (like Anki <code>{sentence}</code>).</div>
+            </div>
+            <div class="settings-item-right">
+                <label class="toggle"><input type="checkbox" data-setting="himotoki.includeSentence"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
+            </div>
+        </div></div>
+        <div class="settings-item"><div class="settings-item-inner">
+            <div class="settings-item-left">
+                <div class="settings-item-label">Include page URL</div>
+                <div class="settings-item-description">Save the source page URL with the word.</div>
+            </div>
+            <div class="settings-item-right">
+                <label class="toggle"><input type="checkbox" data-setting="himotoki.includeUrl"><span class="toggle-body"><span class="toggle-track"></span><span class="toggle-knob"></span></span></label>
             </div>
         </div></div>
     </div>

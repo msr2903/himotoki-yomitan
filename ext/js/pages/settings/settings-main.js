@@ -30,6 +30,7 @@ import {DictionaryController} from './dictionary-controller.js';
 import {DictionaryImportController} from './dictionary-import-controller.js';
 import {ExtensionKeyboardShortcutController} from './extension-keyboard-shortcuts-controller.js';
 import {GenericSettingController} from './generic-setting-controller.js';
+import {HimotokiController} from './himotoki-controller.js';
 import {KeyboardShortcutController} from './keyboard-shortcuts-controller.js';
 import {LanguagesController} from './languages-controller.js';
 import {MecabController} from './mecab-controller.js';
@@ -133,6 +134,9 @@ await Application.main(true, async (application) => {
 
     const ankiTemplatesController = new AnkiTemplatesController(application, settingsController, modalController, ankiController);
     preparePromises.push(ankiTemplatesController.prepare());
+
+    const himotokiController = new HimotokiController(settingsController);
+    preparePromises.push(himotokiController.prepare());
 
     const scanInputsController = new ScanInputsController(settingsController);
     preparePromises.push(scanInputsController.prepare());

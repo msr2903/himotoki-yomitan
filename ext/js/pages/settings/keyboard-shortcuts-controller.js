@@ -62,6 +62,7 @@ export class KeyboardShortcutController {
             ['profilePrevious',                  {scopes: new Set(['popup', 'search', 'web'])}],
             ['profileNext',                      {scopes: new Set(['popup', 'search', 'web'])}],
             ['addNote',                          {scopes: new Set(['popup', 'search']), argument: {template: 'hotkey-argument-anki-card-format', default: '0'}}],
+            ['addHimotokiNote',                  {scopes: new Set(['popup', 'search'])}],
             ['viewNotes',                        {scopes: new Set(['popup', 'search']), argument: {template: 'hotkey-argument-anki-card-format', default: '0'}}],
             ['playAudio',                        {scopes: new Set(['popup', 'search'])}],
             ['playAudioFromSource',              {scopes: new Set(['popup', 'search']), argument: {template: 'hotkey-argument-audio-source', default: 'jpod101'}}],

@@ -98,6 +98,7 @@ export type ProfileOptions = {
     dictionaries: DictionariesOptions;
     parsing: ParsingOptions;
     anki: AnkiOptions;
+    himotoki: HimotokiOptions;
     sentenceParsing: SentenceParsingOptions;
     inputs: InputsOptions;
     clipboard: ClipboardOptions;
@@ -317,6 +318,13 @@ export type AnkiOptions = {
     downloadTimeout: number;
     forceSync: boolean;
     noteDupeCheckFirst: boolean;
+};
+
+export type HimotokiOptions = {
+    enable: boolean;
+    folderId: string;
+    includeSentence: boolean;
+    includeUrl: boolean;
 };
 
 export type AnkiScreenshotOptions = {
