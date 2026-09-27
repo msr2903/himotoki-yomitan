@@ -42,6 +42,8 @@ const TOKEN_REFRESH_MARGIN = 60_000;
 const SAVED_CACHE_MAX_AGE = 60_000;
 /** Attempts for a read-modify-write when another client writes concurrently. */
 const MAX_WRITE_ATTEMPTS = 3;
+/** Firebase errors that require a fresh sign-in rather than a retry. */
+const INVALID_SESSION_ERRORS = new Set(['TOKEN_EXPIRED', 'USER_DISABLED', 'USER_NOT_FOUND', 'INVALID_REFRESH_TOKEN']);
 
 /**
  * Himotoki account access via Google sign-in, Firebase Auth, and the Firestore REST API.
@@ -51,6 +53,12 @@ export class HimotokiClient {
     constructor() {
         /** @type {?Promise<?import('himotoki').Session>} */
         this._sessionPromise = null;
+        /** @type {number} Changes when sign-in or sign-out starts, not when a token refreshes. */
+        this._sessionVersion = 0;
+        /** @type {?Promise<import('himotoki').Session>} */
+        this._refreshPromise = null;
+        /** @type {?Promise<import('himotoki').SavedBlob>} */
+        this._savedPromise = null;
         /** @type {?{blob: import('himotoki').SavedBlob, fetchedAt: number}} */
         this._savedCache = null;
     }
@@ -78,6 +86,7 @@ export class HimotokiClient {
         if (GOOGLE_OAUTH_CLIENT_ID.length === 0) {
             throw new Error('Himotoki sign-in is not configured in this build (missing Google OAuth client ID)');
         }
+        const sessionVersion = this._invalidateSession();
         const redirectUrl = chrome.identity.getRedirectURL();
         const idToken = await this._getGoogleIdToken(redirectUrl);
 
@@ -95,6 +104,8 @@ export class HimotokiClient {
             },
         );
 
+        this._assertSessionVersion(sessionVersion);
+        this._invalidateSession();
         await this._setSession({
             uid: response.localId,
             email: response.email ?? '',
@@ -110,6 +121,7 @@ export class HimotokiClient {
      * @returns {Promise<import('himotoki').Status>}
      */
     async signOut() {
+        this._invalidateSession();
         await this._setSession(null);
         return await this.getStatus();
     }
@@ -119,18 +131,36 @@ export class HimotokiClient {
      * @returns {Promise<import('himotoki').SavedSummary>}
      */
     async getSaved(forceRefresh) {
+        const sessionVersion = this._sessionVersion;
         const session = await this._getStoredSession();
+        this._assertSessionVersion(sessionVersion);
         if (session === null) {
             return {favoriteKeys: [], folders: []};
         }
+        let blob = this._savedCache?.blob;
         if (forceRefresh || this._savedCache === null || Date.now() - this._savedCache.fetchedAt > SAVED_CACHE_MAX_AGE) {
-            const {blob} = await this._readSavedDocument();
-            this._setSavedCache(blob);
+            if (this._savedPromise === null) {
+                const cache = this._savedCache;
+                this._savedPromise = (async () => {
+                    const {blob: savedBlob} = await this._readSavedDocument(sessionVersion);
+                    this._assertSessionVersion(sessionVersion);
+                    // A save may have completed while the read was in flight.
+                    if (this._savedCache === cache) { this._setSavedCache(savedBlob); }
+                    return this._savedCache?.blob ?? savedBlob;
+                })();
+            }
+            const promise = this._savedPromise;
+            try {
+                blob = await promise;
+            } finally {
+                if (this._savedPromise === promise) { this._savedPromise = null; }
+            }
         }
-        const {blob} = /** @type {{blob: import('himotoki').SavedBlob}} */ (this._savedCache);
+        this._assertSessionVersion(sessionVersion);
+        const savedBlob = /** @type {import('himotoki').SavedBlob} */ (blob);
         return {
-            favoriteKeys: blob.favorites.map(({source, seq}) => favoriteKey(source, seq)),
-            folders: blob.folders,
+            favoriteKeys: savedBlob.favorites.map(({source, seq}) => favoriteKey(source, seq)),
+            folders: savedBlob.folders,
         };
     }
 
@@ -141,15 +171,17 @@ export class HimotokiClient {
      * @returns {Promise<import('himotoki').AddFavoriteResult>}
      */
     async addFavorite(favorite) {
+        const sessionVersion = this._sessionVersion;
         for (let attempt = 1; ; ++attempt) {
-            const {blob, updateTime} = await this._readSavedDocument();
+            const {blob, updateTime} = await this._readSavedDocument(sessionVersion);
             const result = upsertFavorite(blob, favorite, Date.now());
             try {
-                await this._writeSavedDocument(result.blob, updateTime);
+                await this._writeSavedDocument(result.blob, updateTime, sessionVersion);
             } catch (e) {
                 if (e instanceof HimotokiConflictError && attempt < MAX_WRITE_ATTEMPTS) { continue; }
                 throw e;
             }
+            this._assertSessionVersion(sessionVersion);
             this._setSavedCache(result.blob);
             return {added: result.added};
         }
@@ -218,6 +250,10 @@ export class HimotokiClient {
                 });
                 return isSession(session) ? session : null;
             })();
+            const promise = this._sessionPromise;
+            void promise.catch(() => {
+                if (this._sessionPromise === promise) { this._sessionPromise = null; }
+            });
         }
         return this._sessionPromise;
     }
@@ -227,7 +263,6 @@ export class HimotokiClient {
      */
     async _setSession(session) {
         this._sessionPromise = Promise.resolve(session);
-        this._savedCache = null;
         await new Promise((resolve, reject) => {
             /** */
             const callback = () => {
@@ -247,33 +282,60 @@ export class HimotokiClient {
     }
 
     /**
-     * Returns a session with an unexpired ID token, refreshing it if needed.
-     * Concurrent callers share one refresh request.
+     * Invalidates work started under a previous account state.
+     * @returns {number}
+     */
+    _invalidateSession() {
+        this._savedCache = null;
+        this._savedPromise = null;
+        this._refreshPromise = null;
+        return ++this._sessionVersion;
+    }
+
+    /**
+     * @param {number} sessionVersion
+     * @throws {Error} If authentication changed while the operation was in flight.
+     */
+    _assertSessionVersion(sessionVersion) {
+        if (sessionVersion !== this._sessionVersion) {
+            throw new Error('Himotoki session changed. Please try again.');
+        }
+    }
+
+    /**
+     * Returns a session with an unexpired ID token. Concurrent callers share one refresh.
+     * @param {number} sessionVersion
      * @returns {Promise<import('himotoki').Session>}
      */
-    async _getActiveSession() {
+    async _getActiveSession(sessionVersion) {
+        this._assertSessionVersion(sessionVersion);
         const session = await this._getStoredSession();
+        this._assertSessionVersion(sessionVersion);
         if (session === null) {
             throw new Error('Not signed in to Himotoki. Sign in under Settings → Himotoki.');
         }
         if (session.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN) {
             return session;
         }
-
-        const refreshPromise = this._refreshSession(session);
-        this._sessionPromise = refreshPromise;
-        refreshPromise.catch(() => {
-            // Reload from storage next time; a rejected refresh token has already been cleared there.
-            if (this._sessionPromise === refreshPromise) { this._sessionPromise = null; }
-        });
-        return await refreshPromise;
+        if (this._refreshPromise === null) {
+            this._refreshPromise = this._refreshSession(session, sessionVersion);
+        }
+        const promise = this._refreshPromise;
+        try {
+            const activeSession = await promise;
+            this._assertSessionVersion(sessionVersion);
+            return activeSession;
+        } finally {
+            if (this._refreshPromise === promise) { this._refreshPromise = null; }
+        }
     }
 
     /**
      * @param {import('himotoki').Session} session
+     * @param {number} sessionVersion
      * @returns {Promise<import('himotoki').Session>}
      */
-    async _refreshSession(session) {
+    async _refreshSession(session, sessionVersion) {
         /** @type {import('himotoki').RefreshTokenResponse} */
         let response;
         try {
@@ -286,12 +348,16 @@ export class HimotokiClient {
                 },
             );
         } catch (e) {
-            if (e instanceof HimotokiApiError && e.status >= 400 && e.status < 500) {
+            this._assertSessionVersion(sessionVersion);
+            // Firebase may append detail after the code (`USER_DISABLED : The user account ...`).
+            if (e instanceof HimotokiApiError && INVALID_SESSION_ERRORS.has(e.message.split(':')[0].trim())) {
+                this._invalidateSession();
                 await this._setSession(null);
                 throw new Error('Your Himotoki sign-in expired. Sign in again under Settings → Himotoki.');
             }
             throw e;
         }
+        this._assertSessionVersion(sessionVersion);
         /** @type {import('himotoki').Session} */
         const nextSession = {
             ...session,
@@ -312,10 +378,12 @@ export class HimotokiClient {
     }
 
     /**
+     * @param {number} sessionVersion
      * @returns {Promise<{blob: import('himotoki').SavedBlob, updateTime: ?string}>}
      */
-    async _readSavedDocument() {
-        const {uid, idToken} = await this._getActiveSession();
+    async _readSavedDocument(sessionVersion) {
+        const {uid, idToken} = await this._getActiveSession(sessionVersion);
+        this._assertSessionVersion(sessionVersion);
         /** @type {import('himotoki').FirestoreDocument} */
         let document;
         try {
@@ -323,11 +391,13 @@ export class HimotokiClient {
                 headers: {Authorization: `Bearer ${idToken}`},
             });
         } catch (e) {
+            this._assertSessionVersion(sessionVersion);
             if (e instanceof HimotokiApiError && e.status === 404) {
                 return {blob: createEmptySavedBlob(Date.now()), updateTime: null};
             }
             throw e;
         }
+        this._assertSessionVersion(sessionVersion);
         return {
             blob: toSavedBlob(decodeFirestoreFields(document.fields ?? {}), Date.now()),
             updateTime: document.updateTime ?? null,
@@ -335,18 +405,23 @@ export class HimotokiClient {
     }
 
     /**
-     * Replaces the document, failing with {@link HimotokiConflictError} if it changed since `updateTime`
+     * Updates the favorite fields (or creates a new document), failing with {@link HimotokiConflictError} if it changed since `updateTime`
      * (or was created, when `updateTime` is null).
      * @param {import('himotoki').SavedBlob} blob
      * @param {?string} updateTime
+     * @param {number} sessionVersion
      */
-    async _writeSavedDocument(blob, updateTime) {
-        const {uid, idToken} = await this._getActiveSession();
+    async _writeSavedDocument(blob, updateTime, sessionVersion) {
+        const {uid, idToken} = await this._getActiveSession(sessionVersion);
+        this._assertSessionVersion(sessionVersion);
         const url = new URL(this._getSavedDocumentUrl(uid));
         if (updateTime === null) {
             url.searchParams.set('currentDocument.exists', 'false');
         } else {
             url.searchParams.set('currentDocument.updateTime', updateTime);
+            // Preserve folders, likes, schema version, and fields introduced by newer clients.
+            url.searchParams.append('updateMask.fieldPaths', 'favorites');
+            url.searchParams.append('updateMask.fieldPaths', 'updatedAt');
         }
         try {
             await this._fetchGoogleApi(url.toString(), {
@@ -355,9 +430,10 @@ export class HimotokiClient {
                     'Authorization': `Bearer ${idToken}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({fields: encodeFirestoreFields(blob)}),
+                body: JSON.stringify({fields: encodeFirestoreFields(updateTime === null ? blob : {favorites: blob.favorites, updatedAt: blob.updatedAt})}),
             });
         } catch (e) {
+            this._assertSessionVersion(sessionVersion);
             if (e instanceof HimotokiApiError) {
                 if (e.status === 409 || e.statusText === 'FAILED_PRECONDITION' || e.statusText === 'ALREADY_EXISTS' || e.statusText === 'ABORTED') {
                     throw new HimotokiConflictError(e.message);
@@ -368,6 +444,7 @@ export class HimotokiClient {
             }
             throw e;
         }
+        this._assertSessionVersion(sessionVersion);
     }
 
     /**

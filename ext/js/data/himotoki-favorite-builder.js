@@ -95,10 +95,12 @@ function buildKanjiFavorite(dictionaryEntry, context, options) {
  */
 function resolveIdentity(dictionaryEntry, term, reading) {
     for (const definition of dictionaryEntry.definitions) {
+        const source = sourceFromDictionaryName(definition.dictionary);
+        if (source === null) { continue; }
         for (const sequence of definition.sequences) {
-            if (typeof sequence === 'number' && sequence >= 0) {
+            if (Number.isSafeInteger(sequence) && sequence > 0) {
                 return {
-                    source: sourceFromDictionaryName(definition.dictionary),
+                    source,
                     seq: sequence,
                 };
             }
@@ -112,14 +114,14 @@ function resolveIdentity(dictionaryEntry, term, reading) {
 
 /**
  * @param {string} dictionaryName
- * @returns {string}
+ * @returns {?string}
  */
 function sourceFromDictionaryName(dictionaryName) {
     const name = (dictionaryName || '').toLowerCase();
     if (name.includes('jitendex')) { return 'jitendex'; }
     if (name.includes('jmdict') || name.includes('jmdictdb')) { return 'jmdict'; }
-    // JMDict-compatible packs share sequence numbers; Himotoki word pages prefer jitendex.
-    return 'jitendex';
+    // Sequence numbers in other dictionaries are local IDs, not JMdict identities.
+    return null;
 }
 
 /**

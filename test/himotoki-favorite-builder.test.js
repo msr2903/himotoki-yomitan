@@ -118,6 +118,21 @@ describe('Himotoki favorite builder', () => {
         expect(favorite.folderIds).toStrictEqual([]);
     });
 
+    test('does not mistake custom dictionary sequences for JMdict IDs', () => {
+        const entry = createTermEntry({term: 'テスト', reading: 'てすと', dictionary: 'Custom Dict', sequence: 1358280, entries: ['test']});
+        const favorite = buildHimotokiFavorite(entry, context, options);
+        expect(favorite.source).toBe('yomitan');
+        expect(favorite.seq).toBe(stableSeq('テスト', 'てすと', 'Custom Dict'));
+    });
+
+    test('finds a compatible dictionary even after a custom dictionary', () => {
+        const entry = createTermEntry({term: '寿司', reading: 'すし', dictionary: 'Custom Dict', sequence: 42, entries: ['sushi']});
+        entry.definitions.push({...entry.definitions[0], dictionary: 'JMdict', sequences: [1358280]});
+        const favorite = buildHimotokiFavorite(entry, context, options);
+        expect(favorite.source).toBe('jmdict');
+        expect(favorite.seq).toBe(1358280);
+    });
+
     test('extracts glossary lists from structured content', () => {
         /** @type {import('dictionary-data').TermGlossaryContent} */
         const structuredContent = {
