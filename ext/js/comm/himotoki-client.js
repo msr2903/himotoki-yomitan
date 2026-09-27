@@ -349,7 +349,8 @@ export class HimotokiClient {
             );
         } catch (e) {
             this._assertSessionVersion(sessionVersion);
-            if (e instanceof HimotokiApiError && INVALID_SESSION_ERRORS.has(e.message)) {
+            // Firebase may append detail after the code (`USER_DISABLED : The user account ...`).
+            if (e instanceof HimotokiApiError && INVALID_SESSION_ERRORS.has(e.message.split(':')[0].trim())) {
                 this._invalidateSession();
                 await this._setSession(null);
                 throw new Error('Your Himotoki sign-in expired. Sign in again under Settings → Himotoki.');

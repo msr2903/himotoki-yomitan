@@ -134,7 +134,7 @@ describe('Himotoki client', () => {
         await expect(client.getSaved(false)).resolves.toStrictEqual({favoriteKeys: [], folders: []});
     });
 
-    test.each(['TOKEN_EXPIRED', 'USER_DISABLED', 'USER_NOT_FOUND', 'INVALID_REFRESH_TOKEN'])('clears invalid sessions on %s', async (message) => {
+    test.each(['TOKEN_EXPIRED', 'USER_DISABLED', 'USER_NOT_FOUND', 'INVALID_REFRESH_TOKEN', 'USER_DISABLED : The user account has been disabled by an administrator.'])('clears invalid sessions on %s', async (message) => {
         const {client, fetchMock, getSession} = setup(true);
         fetchMock.mockResolvedValueOnce(jsonResponse({error: {message}}, 400));
         await expect(client.getSaved(false)).rejects.toThrow(/sign-in expired/i);
