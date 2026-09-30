@@ -1,0 +1,13 @@
+
+ RUN  v3.0.9 /private/tmp/himotoki-yomitan-audit-20260930
+
+stdout | test/audit-timeout.test.js > audit: stalled account HTTP request > a library read remains shared and pending after ten minutes without an abort signal
+After 10 min: settled= false request count= 1 signal= undefined
+
+ ✓ test/audit-timeout.test.js (1 test) 14ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:11:31
+   Duration  253ms (transform 28ms, setup 0ms, collect 32ms, tests 14ms, environment 0ms, prepare 47ms)
+

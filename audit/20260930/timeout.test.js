@@ -1,0 +1,7 @@
+import {afterEach,describe,expect,it,vi} from 'vitest';import {HimotokiClient} from '../ext/js/comm/himotoki-client.js';import {encodeFirestoreFields,createEmptySavedBlob} from '../ext/js/data/himotoki-saved-blob.js';
+afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals()});
+describe('audit: stalled account HTTP request',()=>{
+ it('a library read remains shared and pending after ten minutes without an abort signal',async()=>{
+ vi.useFakeTimers();const session={uid:'a',email:'a@example.test',displayName:'A',idToken:'fake-id',refreshToken:'fake-refresh',expiresAt:Date.now()+3600000};vi.stubGlobal('chrome',{runtime:{},storage:{local:{get:(_k,cb)=>cb({himotokiSession:session})}}});let release;const fetcher=vi.fn(()=>new Promise(r=>release=r));vi.stubGlobal('fetch',fetcher);const client=new HimotokiClient();let settled=false;const first=client.getSaved(false).finally(()=>settled=true);for(let i=0;i<12;i++)await Promise.resolve();expect(fetcher).toHaveBeenCalledTimes(1);await vi.advanceTimersByTimeAsync(600000);expect(settled).toBe(false);expect(fetcher.mock.calls[0][1].signal).toBeUndefined();const second=client.getSaved(true);for(let i=0;i<12;i++)await Promise.resolve();expect(fetcher).toHaveBeenCalledTimes(1);console.log('After 10 min: settled=',settled,'request count=',fetcher.mock.calls.length,'signal=',fetcher.mock.calls[0][1].signal);release(Response.json({fields:encodeFirestoreFields(createEmptySavedBlob(Date.now())),updateTime:'t'}));await Promise.all([first,second]);
+ });
+});
