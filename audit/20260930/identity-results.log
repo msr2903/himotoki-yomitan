@@ -1,0 +1,13 @@
+
+ RUN  v3.0.9 /private/tmp/himotoki-yomitan-audit-20260930
+
+stdout | test/audit-identity.test.js > two real Japanese words get the same fallback id and merge into one favorite
+{"favorites":[{"source":"yomitan","seq":"yt_8e85038f","headword":"ジョーゼット","reading":"ジョーゼット","gloss":"georgette","pitch":"","folderIds":[]},{"source":"yomitan","seq":"yt_8e85038f","headword":"運び込む","reading":"はこびこむ","gloss":"to carry in; to bring in","pitch":"","folderIds":[]}],"firstAdded":true,"secondAdded":false,"result":[{"source":"yomitan","seq":"yt_8e85038f","headword":"運び込む","reading":"はこびこむ","gloss":"to carry in; to bring in","pitch":"","folderIds":[],"savedAt":2}]}
+
+ ✓ test/audit-identity.test.js (1 test) 2ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:02:12
+   Duration  279ms (transform 22ms, setup 0ms, collect 20ms, tests 2ms, environment 0ms, prepare 65ms)
+

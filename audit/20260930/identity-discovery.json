@@ -1,0 +1,59 @@
+{
+  "dictionary": "Custom Japanese Dictionary",
+  "pair": [
+    {
+      "headword": "ジョーゼット",
+      "reading": "ジョーゼット",
+      "gloss": "georgette",
+      "public_seq": 1066270
+    },
+    {
+      "headword": "運び込む",
+      "reading": "はこびこむ",
+      "gloss": "to carry in; to bring in",
+      "public_seq": 1172640
+    }
+  ],
+  "favorites": [
+    {
+      "source": "yomitan",
+      "seq": "yt_8e85038f",
+      "headword": "ジョーゼット",
+      "reading": "ジョーゼット",
+      "gloss": "georgette",
+      "pitch": "",
+      "folderIds": []
+    },
+    {
+      "source": "yomitan",
+      "seq": "yt_8e85038f",
+      "headword": "運び込む",
+      "reading": "はこびこむ",
+      "gloss": "to carry in; to bring in",
+      "pitch": "",
+      "folderIds": []
+    }
+  ],
+  "result": {
+    "blob": {
+      "version": 1,
+      "folders": [],
+      "favorites": [
+        {
+          "source": "yomitan",
+          "seq": "yt_8e85038f",
+          "headword": "運び込む",
+          "reading": "はこびこむ",
+          "gloss": "to carry in; to bring in",
+          "pitch": "",
+          "folderIds": [],
+          "savedAt": 2
+        }
+      ],
+      "likes": [],
+      "lastFolderId": "",
+      "updatedAt": 3
+    },
+    "added": false
+  }
+}
