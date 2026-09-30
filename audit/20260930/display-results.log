@@ -1,0 +1,19 @@
+
+ RUN  v3.0.9 /private/tmp/himotoki-yomitan-audit-20260930
+
+stdout | test/audit-display.test.js > audit: actual popup controller > the registered save hotkey opens quick-add with integration disabled
+Disabled integration hotkey opens: https://himotoki.web.app/save?text=%E7%8C%AB&sentence=%E7%8C%AB%E3%81%8C%E5%A5%BD%E3%81%8D&url=https%3A%2F%2Fexample.test%2Fread&title=Test
+
+stdout | test/audit-display.test.js > audit: actual popup controller > two hotkeys submit two writes despite the disabled saving button
+Pending save request count: 2
+
+stdout | test/audit-display.test.js > audit: actual popup controller > background saved-state refresh re-enables a pending save button
+Pending button after saved-state refresh: ready
+
+ ✓ test/audit-display.test.js (3 tests) 151ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:42:44
+   Duration  664ms (transform 35ms, setup 0ms, collect 304ms, tests 151ms, environment 0ms, prepare 48ms)
+

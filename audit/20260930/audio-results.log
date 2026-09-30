@@ -1,0 +1,17 @@
+
+ RUN  v3.0.9 /private/tmp/himotoki-yomitan-audit-20260930
+
+Sourcemap for "/private/tmp/himotoki-yomitan-audit-20260930/ext/lib/parse5.js" points to missing source files
+stdout | test/audit-audio.test.js > audit: Wikimedia audio terms > C++ has a supplied matching filename but is rejected and query pluses become spaces
+Decoded srsearch: intitle:/ja(-[a-zA-Z]{2})?-C  [0123456789]*.ogg/i matching result count: 0
+
+stdout | test/audit-audio.test.js > audit: Wikimedia audio terms > regex syntax in a dictionary term rejects an otherwise literal matching recording
+Literal (笑) recording rejected: true
+
+ ✓ test/audit-audio.test.js (2 tests) 25ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:44:46
+   Duration  495ms (transform 173ms, setup 0ms, collect 220ms, tests 25ms, environment 0ms, prepare 92ms)
+
