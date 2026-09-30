@@ -1,0 +1,28 @@
+[
+  {
+    "source": "yomitan",
+    "seq": "yt_efd0d5f8",
+    "headword": "猫",
+    "reading": "ねこ",
+    "gloss": "cat",
+    "pitch": "",
+    "folderIds": [],
+    "contextSentence": "猫が好きです。",
+    "sourceUrl": "https://example.test/lesson",
+    "videoTitle": "Audit fixture",
+    "savedAt": 1790742874644
+  },
+  {
+    "source": "yomitan",
+    "seq": "yt_104b83df",
+    "headword": "猫",
+    "reading": "",
+    "gloss": "cat",
+    "pitch": "",
+    "folderIds": [],
+    "contextSentence": "猫が好きです。",
+    "sourceUrl": "https://example.test/lesson",
+    "videoTitle": "Audit fixture",
+    "savedAt": 1790742874644
+  }
+]
