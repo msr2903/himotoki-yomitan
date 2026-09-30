@@ -1,0 +1,13 @@
+
+ RUN  v3.0.9 /private/tmp/himotoki-yomitan-audit-20260930
+
+stdout | test/audit-settings-account.test.js > late saved-list failure overwrites signed-out settings status with old signed-in account text
+After successful sign-out, late rejected read displays: Signed in as old-account@example.test, but your saved words couldn't be loaded: Account changed while the request was in flight ; sign-out button remains hidden.
+
+ ✓ test/audit-settings-account.test.js (1 test) 33ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:20:01
+   Duration  470ms (transform 25ms, setup 0ms, collect 218ms, tests 33ms, environment 0ms, prepare 54ms)
+
