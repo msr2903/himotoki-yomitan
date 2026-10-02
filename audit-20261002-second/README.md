@@ -1,0 +1,3 @@
+# Second Himotoki ecosystem audit: Yomitan evidence
+
+Source: `b4fc71f15c999620ba606d268f6a86177710db9e`. Run `node /path/to/yomitan-persistence-probe.mjs` from that checkout. The script imports the actual HimotokiClient and favorite builder; it uses controlled Chrome storage callbacks and a fake token response. No account or network is accessed. It holds the old refresh write, completes sign-out removal, then acknowledges the old write successfully. The pitch case uses the repository's existing translator-test-results.json entry for 打ち込む. Assertions confirm observed bad behavior. These are code-boundary reproductions, not browser screenshots.
