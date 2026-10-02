@@ -1,2 +1,1 @@
-{"case":"successful old token persistence completes after successful sign-out removal","currentSignedIn":false,"restartedSignedIn":true,"storedToken":"refreshed","storageErrors":0}
 {"case":"saving an existing translator fixture keeps only its first pitch pattern","headword":"打ち込む","dictionaryPatterns":[0,3],"savedPitch":"0","fixture":"test/data/translator-test-results.json"}
