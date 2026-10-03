@@ -654,5 +654,5 @@ function getCommonsApiUrl(params) {
  * @returns {string}
  */
 function escapeSearchRegExp(text) {
-    return text.replaceAll(/[.?+*|{}[\]()"\\#@&<>~/]/g, '\\$&');
+    return text.replaceAll(/[.?+*|{}[\]()"\\#@&<>~/^$]/g, '\\$&');
 }

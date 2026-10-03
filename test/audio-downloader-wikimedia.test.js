@@ -16,6 +16,7 @@
  */
 
 import {describe, expect, test} from 'vitest';
+import {normalizeRequestUrl} from '../ext/js/background/request-builder.js';
 import {AudioDownloader} from '../ext/js/media/audio-downloader.js';
 
 /** @type {import('language').LanguageSummary} */
@@ -32,7 +33,8 @@ function setup(filename, user) {
     const urls = [];
     const requestBuilder = /** @type {import('../ext/js/background/request-builder.js').RequestBuilder} */ (/** @type {unknown} */ ({
         fetchAnonymous: async (/** @type {string} */ url) => {
-            const parsed = new URL(url);
+            // What the real RequestBuilder sends, so an escape it undid shows.
+            const parsed = new URL(normalizeRequestUrl(url));
             urls.push(parsed);
             const body = parsed.searchParams.get('list') === 'search' ?
                 {query: {search: [{title: filename}]}} :
@@ -68,5 +70,22 @@ describe('Wikimedia Commons audio for terms with regex or URL characters (#5)', 
     test('a regex-like term does not match other recordings', async () => {
         const {downloader} = setup('File:Ja-Cxx.ogg', 'Someone');
         expect(await downloader.getTermAudioInfoList({type: 'wiktionary', url: '', voice: ''}, 'C..', '', JAPANESE)).toStrictEqual([]);
+    });
+});
+
+describe('request URL normalization (#5 review)', () => {
+    test.each([
+        ['an encoded + in a query value stays one', 'https://x.test/w?q=C%2B%2B', 'https://x.test/w?q=C%2B%2B'],
+        ['other reserved escapes stay', 'https://x.test/w?q=a%26b%3Dc', 'https://x.test/w?q=a%26b%3Dc'],
+        ['raw Japanese is encoded', 'https://x.test/w?q=猫', 'https://x.test/w?q=%E7%8C%AB'],
+        ['existing escapes are not doubled', 'https://x.test/w?q=%E7%8C%AB', 'https://x.test/w?q=%E7%8C%AB'],
+    ])('%s', (_name, input, expected) => {
+        expect(normalizeRequestUrl(input)).toBe(expected);
+    });
+
+    test('a term with regex anchors is matched literally', async () => {
+        const {downloader, urls} = setup('File:Ja-a^b$.ogg', 'Someone');
+        await downloader.getTermAudioInfoList({type: 'wiktionary', url: '', voice: ''}, 'a^b$', '', JAPANESE);
+        expect(urls[0].searchParams.get('srsearch')).toContain('a\\^b\\$');
     });
 });
