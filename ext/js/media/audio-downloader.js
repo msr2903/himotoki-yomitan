@@ -19,7 +19,7 @@
 import {RequestBuilder} from '../background/request-builder.js';
 import {ExtensionError} from '../core/extension-error.js';
 import {readResponseJson} from '../core/json.js';
-import {arrayBufferDigest} from '../core/utilities.js';
+import {arrayBufferDigest, escapeRegExp} from '../core/utilities.js';
 import {arrayBufferToBase64} from '../data/array-buffer-util.js';
 import {JsonSchema} from '../data/json-schema.js';
 import {NativeSimpleDOMParser} from '../dom/native-simple-dom-parser.js';
@@ -311,8 +311,8 @@ export class AudioDownloader {
         }
         const {iso639_3} = languageSummary;
         const searchCategory = `incategory:"Lingua_Libre_pronunciation-${iso639_3}"`;
-        const searchString = `-${term}.wav`;
-        const fetchUrl = `https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srsearch=intitle:/${searchString}/i+${searchCategory}&srnamespace=6&origin=*`;
+        const searchString = `-${escapeSearchRegExp(term)}\\.wav`;
+        const fetchUrl = getCommonsApiUrl({list: 'search', srsearch: `intitle:/${searchString}/i ${searchCategory}`, srnamespace: '6'});
 
         /**
          * @param {string} filename
@@ -320,7 +320,7 @@ export class AudioDownloader {
          * @returns {boolean}
          */
         const validateFilename = (filename, fileUser) => {
-            const validFilenameTest = new RegExp(`^File:LL-Q\\d+\\s+\\(${iso639_3}\\)-${fileUser}-${term}\\.wav$`, 'i');
+            const validFilenameTest = new RegExp(`^File:LL-Q\\d+\\s+\\(${iso639_3}\\)-${escapeRegExp(fileUser)}-${escapeRegExp(term)}\\.wav$`, 'i');
             return validFilenameTest.test(filename);
         };
 
@@ -333,15 +333,15 @@ export class AudioDownloader {
             throw new Error('Invalid arguments');
         }
         const {iso} = languageSummary;
-        const searchString = `${iso}(-[a-zA-Z]{2})?-${term}[0123456789]*.ogg`;
-        const fetchUrl = `https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srsearch=intitle:/${searchString}/i&srnamespace=6&origin=*`;
+        const searchString = `${iso}(-[a-zA-Z]{2})?-${escapeSearchRegExp(term)}[0123456789]*\\.ogg`;
+        const fetchUrl = getCommonsApiUrl({list: 'search', srsearch: `intitle:/${searchString}/i`, srnamespace: '6'});
 
         /**
          * @param {string} filename
          * @returns {boolean}
          */
         const validateFilename = (filename) => {
-            const validFilenameTest = new RegExp(`^File:${iso}(-\\w\\w)?-${term}\\d*\\.ogg$`, 'i');
+            const validFilenameTest = new RegExp(`^File:${iso}(-\\w\\w)?-${escapeRegExp(term)}\\d*\\.ogg$`, 'i');
             return validFilenameTest.test(filename);
         };
 
@@ -351,7 +351,7 @@ export class AudioDownloader {
          * @returns {string}
          */
         const displayName = (filename, fileUser) => {
-            const match = filename.match(new RegExp(`^File:${iso}(-\\w\\w)-${term}`, 'i'));
+            const match = filename.match(new RegExp(`^File:${iso}(-\\w\\w)-${escapeRegExp(term)}`, 'i'));
             if (match === null) {
                 return fileUser;
             }
@@ -377,7 +377,7 @@ export class AudioDownloader {
         const lookupResults = lookupResponse.query.search;
 
         const fetchFileInfos = lookupResults.map(async ({title}) => {
-            const fileInfoURL = `https://commons.wikimedia.org/w/api.php?action=query&format=json&titles=${title}&prop=imageinfo&iiprop=user|url&origin=*`;
+            const fileInfoURL = getCommonsApiUrl({titles: title, prop: 'imageinfo', iiprop: 'user|url'});
             const response2 = await this._requestBuilder.fetchAnonymous(fileInfoURL, DEFAULT_REQUEST_INIT_PARAMS);
             /** @type {import('audio-downloader').WikimediaCommonsFileResponse} */
             const fileResponse = await readResponseJson(response2);
@@ -633,4 +633,26 @@ export function getRequiredAudioSources(language, sources) {
     }
 
     return [...requiredSources].map((type) => ({type, url: '', voice: ''}));
+}
+
+/**
+ * A Wikimedia Commons API query URL. Values are encoded, so a term with `+`,
+ * `&` or `#` stays the term (C++ was searched for as "C  ").
+ * @param {Record<string, string>} params
+ * @returns {string}
+ */
+function getCommonsApiUrl(params) {
+    const url = new URL('https://commons.wikimedia.org/w/api.php');
+    url.search = new URLSearchParams({action: 'query', format: 'json', ...params, origin: '*'}).toString();
+    return url.toString();
+}
+
+/**
+ * Escapes text for a CirrusSearch `intitle:/…/` regular expression (Lucene
+ * syntax), so a term like `(笑)` or `C++` matches literally.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeSearchRegExp(text) {
+    return text.replaceAll(/[.?+*|{}[\]()"\\#@&<>~/]/g, '\\$&');
 }
