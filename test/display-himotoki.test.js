@@ -91,7 +91,11 @@ function setup(document, {enable, signedIn = true}) {
         open,
         hotkey: () => /** @type {() => void} */ (hotkeys.get('addHimotokiNote'))(),
         button: () => /** @type {?HTMLButtonElement} */ (actions.querySelector('button')),
-        refresh: () => /** @type {(details: unknown) => void} */ (events.get('contentUpdateComplete'))({}),
+        // The popup re-renders its entries: the old buttons are gone.
+        refresh: () => {
+            actions.replaceChildren();
+            /** @type {(details: unknown) => void} */ (events.get('contentUpdateComplete'))({});
+        },
     };
 }
 
@@ -127,6 +131,25 @@ describe('Himotoki popup saving', () => {
         await vi.waitFor(() => expect(api.himotokiGetSaved).toHaveBeenCalledTimes(2));
         await vi.waitFor(() => expect(button()?.dataset.himotokiState).toBe('saving'));
         expect(button()?.disabled).toBe(true);
+        expect(window.document.querySelectorAll('.actions button')).toHaveLength(1);
         saves[0].resolve();
+        // The re-rendered button, not the detached one, shows the result.
+        await vi.waitFor(() => expect(button()?.dataset.himotokiState).toBe('saved'));
+        expect(button()?.disabled).toBe(false);
+    });
+
+    test('a failed save shows on the re-rendered button too (#4 review)', async ({window}) => {
+        const {api, hotkey, button, refresh} = setup(window.document, {enable: true});
+        await vi.waitFor(() => expect(button()?.dataset.himotokiState).toBe('ready'));
+        /** @type {() => void} */
+        let fail = () => {};
+        api.himotokiAddFavorite.mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = () => reject(new Error('offline')); }));
+        hotkey();
+        await vi.waitFor(() => expect(api.himotokiAddFavorite).toHaveBeenCalledTimes(1));
+        refresh(); // re-rendered while the save runs
+        await vi.waitFor(() => expect(button()?.dataset.himotokiState).toBe('saving'));
+        fail();
+        await vi.waitFor(() => expect(button()?.dataset.himotokiState).toBe('error'));
+        expect(button()?.disabled).toBe(false);
     });
 });
