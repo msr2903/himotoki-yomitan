@@ -24,6 +24,8 @@ import {
     favoriteKey,
     toSavedBlob,
     upsertFavorite,
+    validFavorites,
+    validFolders,
 } from '../ext/js/data/himotoki-saved-blob.js';
 
 /**
@@ -121,5 +123,42 @@ describe('Himotoki saved blob', () => {
 
     test('Firestore encoding omits undefined properties', () => {
         expect(encodeFirestoreFields({a: void 0, b: null, c: true})).toStrictEqual({b: {nullValue: null}, c: {booleanValue: true}});
+    });
+
+    test('re-saving a legacy favorite keeps its singular folder membership (#14)', () => {
+        // Written by an older client: a singular folderId and no folderIds.
+        const legacy = {source: 'jitendex', seq: 1, headword: '猫', reading: 'ねこ', gloss: 'cat', savedAt: 100, folderId: 'anime'};
+        const blob = toSavedBlob({folders: [{id: 'anime', name: 'Anime', createdAt: 1}], favorites: [legacy]}, 50);
+
+        const {blob: next, added} = upsertFavorite(blob, {source: 'jitendex', seq: 1, headword: '猫', gloss: 'cat; feline'}, 200);
+        expect(added).toBe(false);
+        // The app reads a folderIds array as the whole membership, so the
+        // legacy folder has to be in it.
+        expect(next.favorites[0].folderIds).toStrictEqual(['anime']);
+        expect('folderId' in next.favorites[0]).toBe(false);
+        expect(next.favorites[0].gloss).toBe('cat; feline');
+
+        const filed = upsertFavorite(blob, {source: 'jitendex', seq: 1, headword: '猫', folderIds: ['manga']}, 200).blob;
+        expect(filed.favorites[0].folderIds).toStrictEqual(['anime']);
+    });
+
+    test('null or malformed list entries are skipped, not fatal, and kept on write (#15)', () => {
+        const blob = toSavedBlob({
+            folders: [null, 'x', {id: 'anime', name: 'Anime', createdAt: 1}],
+            favorites: [null, 7, {future: true}, createFavorite({seq: 9})],
+        }, 50);
+        expect(validFolders(blob).map(({id}) => id)).toStrictEqual(['anime']);
+        expect(validFavorites(blob).map(({seq}) => seq)).toStrictEqual([9]);
+
+        const updated = upsertFavorite(blob, {source: 'jitendex', seq: 9, headword: '語', gloss: 'words', folderIds: ['anime']}, 100);
+        expect(updated.added).toBe(false);
+        expect(updated.blob.favorites).toHaveLength(4);
+        expect(updated.blob.favorites.slice(0, 3)).toStrictEqual([null, 7, {future: true}]);
+        expect(updated.blob.favorites[3]).toMatchObject({seq: 9, gloss: 'words', folderIds: ['anime']});
+
+        const added = upsertFavorite(blob, {source: 'jitendex', seq: 10, headword: '新'}, 100);
+        expect(added.added).toBe(true);
+        expect(added.blob.favorites).toHaveLength(5);
+        expect(added.blob.folders).toStrictEqual([null, 'x', {id: 'anime', name: 'Anime', createdAt: 1}]);
     });
 });

@@ -19,6 +19,12 @@
 export type FavoriteInput = {
     source?: string;
     seq: string | number;
+    /**
+     * Yomitan-only: the 32-bit identity earlier builds gave this word. A save
+     * merges into a favorite stored under it only if the word matches.
+     * Never written to the library.
+     */
+    legacySeq?: string;
     headword: string;
     reading?: string;
     gloss?: string;
@@ -38,6 +44,8 @@ export type Favorite = {
     gloss: string;
     pitch?: string;
     folderIds: string[];
+    /** Single membership written by older Himotoki clients; read only when `folderIds` is absent. */
+    folderId?: string;
     savedAt: number;
     contextSentence?: string;
     sourceUrl?: string;

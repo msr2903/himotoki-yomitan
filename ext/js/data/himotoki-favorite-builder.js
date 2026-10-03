@@ -41,8 +41,11 @@ export function buildHimotokiFavorite(dictionaryEntry, context, options) {
  */
 function buildTermFavorite(dictionaryEntry, context, options) {
     const {term, reading, headwordIndex} = pickHeadword(dictionaryEntry);
-    const {source, seq} = resolveIdentity(dictionaryEntry, term, reading);
-    const gloss = extractGloss(dictionaryEntry);
+    // A grouped entry holds several headwords; only the chosen one's
+    // definitions give its identity and meanings.
+    const definitions = definitionsOf(dictionaryEntry, headwordIndex);
+    const {source, seq, legacySeq} = resolveIdentity(definitions, term, reading);
+    const gloss = extractGloss(definitions);
     const pitch = extractPitch(dictionaryEntry, headwordIndex);
 
     /** @type {import('himotoki').FavoriteInput} */
@@ -55,9 +58,21 @@ function buildTermFavorite(dictionaryEntry, context, options) {
         pitch,
         folderIds: folderIdsFromOptions(options),
     };
+    if (legacySeq) { favorite.legacySeq = legacySeq; }
 
     applyMiningFields(favorite, context, options);
     return favorite;
+}
+
+/**
+ * The definitions that belong to one headword of a (possibly grouped) entry.
+ * @param {import('dictionary').TermDictionaryEntry} dictionaryEntry
+ * @param {number} headwordIndex
+ * @returns {import('dictionary').TermDefinition[]}
+ */
+function definitionsOf(dictionaryEntry, headwordIndex) {
+    const own = dictionaryEntry.definitions.filter(({headwordIndices}) => !headwordIndices?.length || headwordIndices.includes(headwordIndex));
+    return own.length > 0 ? own : dictionaryEntry.definitions;
 }
 
 /**
@@ -69,12 +84,13 @@ function buildTermFavorite(dictionaryEntry, context, options) {
 function buildKanjiFavorite(dictionaryEntry, context, options) {
     const character = dictionaryEntry.character;
     const gloss = (dictionaryEntry.definitions || []).filter((s) => typeof s === 'string' && s.trim()).slice(0, 8).join('; ');
-    const seq = stableSeq(character, '', dictionaryEntry.dictionary || 'kanji');
+    const dictionary = dictionaryEntry.dictionary || 'kanji';
 
     /** @type {import('himotoki').FavoriteInput} */
     const favorite = {
         source: 'yomitan',
-        seq,
+        seq: stableSeq(character, '', dictionary),
+        legacySeq: legacyStableSeq(character, '', dictionary),
         headword: character,
         reading: '',
         gloss,
@@ -88,13 +104,13 @@ function buildKanjiFavorite(dictionaryEntry, context, options) {
 
 /**
  * Prefer JMDict-compatible sequence from Yomitan when present; otherwise stable yomitan id.
- * @param {import('dictionary').TermDictionaryEntry} dictionaryEntry
+ * @param {import('dictionary').TermDefinition[]} definitions The chosen headword's definitions.
  * @param {string} term
  * @param {string} reading
- * @returns {{source: string, seq: string|number}}
+ * @returns {{source: string, seq: string|number, legacySeq?: string}}
  */
-function resolveIdentity(dictionaryEntry, term, reading) {
-    for (const definition of dictionaryEntry.definitions) {
+function resolveIdentity(definitions, term, reading) {
+    for (const definition of definitions) {
         const source = sourceFromDictionaryName(definition.dictionary);
         if (source === null) { continue; }
         for (const sequence of definition.sequences) {
@@ -106,9 +122,11 @@ function resolveIdentity(dictionaryEntry, term, reading) {
             }
         }
     }
+    const dictionary = definitions[0]?.dictionary || '';
     return {
         source: 'yomitan',
-        seq: stableSeq(term, reading, dictionaryEntry.definitions[0]?.dictionary || ''),
+        seq: stableSeq(term, reading, dictionary),
+        legacySeq: legacyStableSeq(term, reading, dictionary),
     };
 }
 
@@ -130,34 +148,35 @@ function sourceFromDictionaryName(dictionaryName) {
  */
 function pickHeadword(dictionaryEntry) {
     const {headwords} = dictionaryEntry;
-    let bestIndex = 0;
+    let bestIndex = -1;
     for (let i = 0, ii = headwords.length; i < ii; ++i) {
         const {term, reading, sources} = headwords[i];
         for (const {deinflectedText} of sources) {
             if (term === deinflectedText) {
                 return {term, reading, headwordIndex: i};
             }
-            if (reading === deinflectedText && bestIndex === 0) {
+            if (reading === deinflectedText && bestIndex < 0) {
                 bestIndex = i;
             }
         }
     }
-    const headword = headwords[Math.max(0, bestIndex)] || headwords[0];
+    const headwordIndex = Math.max(0, bestIndex);
+    const headword = headwords[headwordIndex];
     return {
-        term: headword?.term || dictionaryEntry.headwords[0]?.term || '',
+        term: headword?.term || '',
         reading: headword?.reading || '',
-        headwordIndex: Math.max(0, bestIndex),
+        headwordIndex,
     };
 }
 
 /**
- * @param {import('dictionary').TermDictionaryEntry} dictionaryEntry
+ * @param {import('dictionary').TermDefinition[]} definitions
  * @returns {string}
  */
-function extractGloss(dictionaryEntry) {
+function extractGloss(definitions) {
     /** @type {string[]} */
     const parts = [];
-    for (const definition of dictionaryEntry.definitions) {
+    for (const definition of definitions) {
         for (const entry of definition.entries) {
             const text = glossaryToText(entry);
             if (text) { parts.push(text); }
@@ -222,6 +241,8 @@ function structuredContentToText(content) {
         const node = /** @type {{tag?: string, content?: unknown, text?: string}} */ (content);
         if (typeof node.text === 'string') { return node.text; }
         if (node.tag === 'br') { return ' '; }
+        // Ruby text annotates the base text; it is not part of the meaning.
+        if (node.tag === 'rt' || node.tag === 'rp') { return ''; }
         const text = 'content' in node ? structuredContentToText(node.content) : '';
         return node.tag === 'li' ? `${text}; ` : text;
     }
@@ -246,15 +267,19 @@ function normalizeWhitespace(text) {
  * @returns {string}
  */
 function extractPitch(dictionaryEntry, headwordIndex) {
+    /** @type {Set<number>} */
+    const positions = new Set();
     for (const group of dictionaryEntry.pronunciations) {
         if (group.headwordIndex !== headwordIndex) { continue; }
         for (const pronunciation of group.pronunciations) {
-            if (pronunciation.type === 'pitch-accent') {
-                return String(pronunciation.positions);
+            // Downstep numbers only: a string is an H/L contour, not a position.
+            if (pronunciation.type === 'pitch-accent' && typeof pronunciation.positions === 'number') {
+                positions.add(pronunciation.positions);
             }
         }
     }
-    return '';
+    // Himotoki's saved-word pitch lists several patterns as "0/3".
+    return [...positions].join('/');
 }
 
 /**
@@ -291,13 +316,34 @@ function folderIdsFromOptions(options) {
 }
 
 /**
- * Stable non-JMDict identity when Yomitan has no sequence.
+ * Stable non-JMDict identity when Yomitan has no sequence: a 64-bit FNV-1a
+ * hash of the word, reading and dictionary. 32 bits let real words collide
+ * (ジョーゼット and 運び込む in one dictionary), and the identity is the key a
+ * save merges on.
  * @param {string} term
  * @param {string} reading
  * @param {string} dictionary
  * @returns {string}
  */
 export function stableSeq(term, reading, dictionary) {
+    const raw = `${term}\u0000${reading}\u0000${dictionary}`;
+    let hash = 0xcbf29ce484222325n;
+    for (let i = 0; i < raw.length; i++) {
+        hash ^= BigInt(raw.charCodeAt(i));
+        hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+    }
+    return `yt_${hash.toString(16).padStart(16, '0')}`;
+}
+
+/**
+ * The 32-bit identity earlier builds saved. Only used to find those saves
+ * again (`legacySeq`), never as a new identity.
+ * @param {string} term
+ * @param {string} reading
+ * @param {string} dictionary
+ * @returns {string}
+ */
+export function legacyStableSeq(term, reading, dictionary) {
     const raw = `${term}\u0000${reading}\u0000${dictionary}`;
     let hash = 2166136261;
     for (let i = 0; i < raw.length; i++) {
