@@ -281,4 +281,68 @@ describe('Himotoki client', () => {
         expect((await client.getSaved(false)).favoriteKeys).toStrictEqual(['jitendex:2', 'jitendex:1']);
         expect(fetchMock).toHaveBeenCalledTimes(4);
     });
+
+    test('a stalled request times out instead of hanging, and a forced refresh does not wait for it (#6)', async () => {
+        vi.useFakeTimers();
+        try {
+            const {client, fetchMock} = setup();
+            /** @type {(AbortSignal|null|undefined)[]} */
+            const signals = [];
+            fetchMock.mockImplementationOnce((_url, init) => {
+                signals.push(init?.signal);
+                return new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+                });
+            });
+            const stalled = client.getSaved(false);
+            const timedOut = expect(stalled).rejects.toThrow(/did not respond/i);
+            await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+            expect(signals[0]).toBeInstanceOf(AbortSignal);
+
+            // A forced refresh starts its own read rather than sharing the stalled one.
+            await expect(client.getSaved(true)).resolves.toStrictEqual({favoriteKeys: [], folders: []});
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+
+            await vi.advanceTimersByTimeAsync(20_000);
+            await timedOut;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    test('a token the server refuses is refreshed once and the request retried (#12)', async () => {
+        const {client, fetchMock, getSession} = setup();
+        fetchMock.mockResolvedValueOnce(jsonResponse({error: {status: 'UNAUTHENTICATED', message: 'TOKEN_EXPIRED'}}, 401))
+            .mockResolvedValueOnce(jsonResponse({id_token: 'new-token', refresh_token: 'new-refresh', expires_in: '3600'}))
+            .mockResolvedValueOnce(savedResponse([1]));
+        await expect(client.getSaved(true)).resolves.toStrictEqual({favoriteKeys: ['jitendex:1'], folders: []});
+        const urls = fetchMock.mock.calls.map(([url]) => new URL(url).hostname);
+        expect(urls).toStrictEqual(['firestore.googleapis.com', 'securetoken.googleapis.com', 'firestore.googleapis.com']);
+        const retry = /** @type {RequestInit} */ (fetchMock.mock.calls[2][1]);
+        expect(/** @type {Record<string, string>} */ (retry.headers).Authorization).toBe('Bearer new-token');
+        expect(getSession()?.idToken).toBe('new-token');
+    });
+
+    test('a token refused again after the refresh is reported, without looping (#12)', async () => {
+        const {client, fetchMock} = setup();
+        const unauthenticated = () => jsonResponse({error: {status: 'UNAUTHENTICATED', message: 'Unauthenticated'}}, 401);
+        fetchMock.mockResolvedValueOnce(unauthenticated())
+            .mockResolvedValueOnce(jsonResponse({id_token: 'new-token', refresh_token: 'new-refresh', expires_in: '3600'}))
+            .mockResolvedValueOnce(unauthenticated());
+        await expect(client.getSaved(true)).rejects.toThrow(/did not accept your sign-in/i);
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    test('a sign-out storage refuses keeps the account signed in here and after a restart (#13)', async () => {
+        const {client, runtime} = setup();
+        const storage = /** @type {{local: {remove: import('vitest').Mock}}} */ (/** @type {{storage: unknown}} */ (globalThis.chrome).storage);
+        storage.local.remove.mockImplementationOnce((_key, callback) => {
+            runtime.lastError = {message: 'storage write failed'};
+            callback();
+            delete runtime.lastError;
+        });
+        await expect(client.signOut()).rejects.toThrow('storage write failed');
+        expect((await client.getStatus()).signedIn).toBe(true);
+        expect((await new HimotokiClient().getStatus()).signedIn).toBe(true);
+    });
 });
