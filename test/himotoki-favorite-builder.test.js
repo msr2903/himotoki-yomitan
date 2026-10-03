@@ -17,7 +17,7 @@
 
 import {describe, expect, test} from 'vitest';
 import {buildHimotokiFavorite, legacyStableSeq, stableSeq} from '../ext/js/data/himotoki-favorite-builder.js';
-import {createEmptySavedBlob, favoriteKey, upsertFavorite} from '../ext/js/data/himotoki-saved-blob.js';
+import {createEmptySavedBlob, favoriteKey, isFavoriteSaved, savedWordKey, upsertFavorite} from '../ext/js/data/himotoki-saved-blob.js';
 
 /** @type {import('anki-templates-internal').Context} */
 const context = {
@@ -181,6 +181,21 @@ describe('Himotoki favorite builder', () => {
         const result = upsertFavorite(blob, second, 3);
         expect(result.added).toBe(true);
         expect(result.blob.favorites.map((f) => f.headword)).toStrictEqual(['運び込む', 'ジョーゼット']);
+    });
+
+    test('the popup shows a word saved under its old ID as saved, but not its collision (#19 review)', () => {
+        const dictionary = 'Custom Japanese Dictionary';
+        const legacy = legacyStableSeq('ジョーゼット', 'ジョーゼット', dictionary);
+        // ジョーゼット was saved by an earlier build under the 32-bit ID.
+        const savedKeys = new Set([favoriteKey('yomitan', legacy)]);
+        const savedWordKeys = new Set([savedWordKey('yomitan', legacy, 'ジョーゼット', 'ジョーゼット')]);
+        const georgette = buildHimotokiFavorite(createTermEntry({term: 'ジョーゼット', reading: 'ジョーゼット', dictionary, sequence: 42, entries: ['georgette']}), context, options);
+        const carryIn = buildHimotokiFavorite(createTermEntry({term: '運び込む', reading: 'はこびこむ', dictionary, sequence: 43, entries: ['to carry in']}), context, options);
+        expect(carryIn.legacySeq).toBe(georgette.legacySeq);
+        expect(isFavoriteSaved(georgette, savedKeys, savedWordKeys)).toBe(true);
+        expect(isFavoriteSaved(carryIn, savedKeys, savedWordKeys)).toBe(false);
+        // Under its current ID a word is saved whatever the legacy keys say.
+        expect(isFavoriteSaved(carryIn, new Set([favoriteKey('yomitan', carryIn.seq)]), new Set())).toBe(true);
     });
 
     test('a word saved under its old 32-bit ID is updated, not duplicated, and a collision is not', () => {

@@ -19,7 +19,7 @@ import {HIMOTOKI_WEB_URL} from '../comm/himotoki-client.js';
 import {EventListenerCollection} from '../core/event-listener-collection.js';
 import {toError} from '../core/to-error.js';
 import {buildHimotokiFavorite} from '../data/himotoki-favorite-builder.js';
-import {favoriteKey} from '../data/himotoki-saved-blob.js';
+import {favoriteKey, isFavoriteSaved} from '../data/himotoki-saved-blob.js';
 
 export class DisplayHimotoki {
     /**
@@ -38,6 +38,8 @@ export class DisplayHimotoki {
         this._eventListeners = new EventListenerCollection();
         /** @type {Set<string>} */
         this._savedKeys = new Set();
+        /** @type {Set<string>} */
+        this._savedWordKeys = new Set();
         /** @type {?import('core').TokenObject} */
         this._updateToken = null;
         /** @type {?import('./display-notification.js').DisplayNotification} */
@@ -118,10 +120,11 @@ export class DisplayHimotoki {
         try {
             const {api} = this._display.application;
             const {signedIn} = await api.himotokiGetStatus();
-            const {favoriteKeys} = signedIn ? await api.himotokiGetSaved(false) : {favoriteKeys: []};
+            const {favoriteKeys, savedWordKeys} = signedIn ? await api.himotokiGetSaved(false) : {favoriteKeys: [], savedWordKeys: []};
             if (this._updateToken !== token) { return; }
             this._signedIn = signedIn;
             this._savedKeys = new Set(favoriteKeys);
+            this._savedWordKeys = new Set(savedWordKeys ?? []);
         } catch {
             // Errors are reported when saving; the buttons stay usable.
             if (this._updateToken !== token) { return; }
@@ -143,11 +146,7 @@ export class DisplayHimotoki {
      */
     _updateButtonState(button) {
         const favorite = this._buildFavorite(Number.parseInt(button.dataset.entryIndex ?? '', 10));
-        // A word saved by an earlier build sits under its old 32-bit identity.
-        const saved = favorite !== null && (
-            this._savedKeys.has(favoriteKey(favorite.source, favorite.seq)) ||
-            (typeof favorite.legacySeq === 'string' && this._savedKeys.has(favoriteKey(favorite.source, favorite.legacySeq)))
-        );
+        const saved = favorite !== null && isFavoriteSaved(favorite, this._savedKeys, this._savedWordKeys);
         this._setButtonState(button, saved ? 'saved' : 'ready');
     }
 

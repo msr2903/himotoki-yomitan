@@ -97,6 +97,8 @@ export type Status = {
 
 export type SavedSummary = {
     favoriteKeys: string[];
+    /** `savedWordKey` of every saved word: legacy ids only count with the word. */
+    savedWordKeys: string[];
     folders: Folder[];
 };
 

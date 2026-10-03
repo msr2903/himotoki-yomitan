@@ -34,6 +34,34 @@ export function favoriteKey(source, seq) {
 }
 
 /**
+ * A saved word's key qualified by the word itself. Ids from older builds are
+ * 32-bit hashes that can collide (運び込む and ジョーゼット), so a match on one
+ * counts only when the headword and reading match too.
+ * @param {string|undefined} source
+ * @param {string|number} seq
+ * @param {string|undefined} headword
+ * @param {string|undefined} reading
+ * @returns {string}
+ */
+export function savedWordKey(source, seq, headword, reading) {
+    return `${favoriteKey(source, seq)}\n${headword || ''}\n${reading || ''}`;
+}
+
+/**
+ * Whether a word is already saved: under its id, or under the 32-bit id an
+ * earlier build gave it — and then only if the saved word is the same one.
+ * @param {import('himotoki').FavoriteInput} favorite
+ * @param {Set<string>} savedKeys `favoriteKey` of every saved word
+ * @param {Set<string>} savedWordKeys `savedWordKey` of every saved word
+ * @returns {boolean}
+ */
+export function isFavoriteSaved(favorite, savedKeys, savedWordKeys) {
+    if (savedKeys.has(favoriteKey(favorite.source, favorite.seq))) { return true; }
+    if (typeof favorite.legacySeq !== 'string') { return false; }
+    return savedWordKeys.has(savedWordKey(favorite.source, favorite.legacySeq, favorite.headword, favorite.reading));
+}
+
+/**
  * @param {number} now
  * @returns {import('himotoki').SavedBlob}
  */
