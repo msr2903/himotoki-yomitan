@@ -52,7 +52,7 @@ export class RequestBuilder {
     async fetchAnonymous(url, init) {
         const id = this._getNewRuleId();
         const originUrl = this._getOriginURL(url);
-        url = encodeURI(decodeURIComponent(url));
+        url = normalizeRequestUrl(url);
 
         this._ruleIds.add(id);
         try {
@@ -336,4 +336,17 @@ export class RequestBuilder {
         }
         return result;
     }
+}
+
+/**
+ * Normalizes a URL for fetching and for the request rule that matches it:
+ * raw characters (a Japanese term) are percent-encoded and existing escapes
+ * are kept as they are, never doubled or decoded. Decoding them first
+ * (`decodeURIComponent`) turned a query value's `%2B` into a literal `+`,
+ * which the server reads as a space (Wikimedia lookups for C++).
+ * @param {string} url
+ * @returns {string}
+ */
+export function normalizeRequestUrl(url) {
+    return encodeURI(url).replaceAll(/%25([0-9A-Fa-f]{2})/g, '%$1');
 }
