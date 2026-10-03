@@ -143,7 +143,11 @@ export class DisplayHimotoki {
      */
     _updateButtonState(button) {
         const favorite = this._buildFavorite(Number.parseInt(button.dataset.entryIndex ?? '', 10));
-        const saved = favorite !== null && this._savedKeys.has(favoriteKey(favorite.source, favorite.seq));
+        // A word saved by an earlier build sits under its old 32-bit identity.
+        const saved = favorite !== null && (
+            this._savedKeys.has(favoriteKey(favorite.source, favorite.seq)) ||
+            (typeof favorite.legacySeq === 'string' && this._savedKeys.has(favoriteKey(favorite.source, favorite.legacySeq)))
+        );
         this._setButtonState(button, saved ? 'saved' : 'ready');
     }
 

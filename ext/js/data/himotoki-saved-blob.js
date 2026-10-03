@@ -79,7 +79,48 @@ function asArray(value) {
 }
 
 /**
- * Adds a favorite, or merges it into an existing one with the same `source:seq`.
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The favorites current code can work with. The blob keeps every entry, so a
+ * malformed or future-shaped one is skipped here instead of failing the whole
+ * document, and is still written back untouched.
+ * @param {import('himotoki').SavedBlob} blob
+ * @returns {import('himotoki').Favorite[]}
+ */
+export function validFavorites(blob) {
+    return blob.favorites.filter((favorite) => isRecord(favorite) && (typeof favorite.seq === 'string' || typeof favorite.seq === 'number') && favorite.seq !== '');
+}
+
+/**
+ * The folders current code can work with (see `validFavorites`).
+ * @param {import('himotoki').SavedBlob} blob
+ * @returns {import('himotoki').Folder[]}
+ */
+export function validFolders(blob) {
+    return blob.folders.filter((folder) => isRecord(folder) && typeof folder.id === 'string' && folder.id !== '');
+}
+
+/**
+ * A favorite's folder memberships, reading the singular `folderId` older
+ * clients wrote when there is no `folderIds` array (the app reads it the
+ * same way).
+ * @param {import('himotoki').Favorite} favorite
+ * @returns {string[]}
+ */
+function membershipsOf(favorite) {
+    if (Array.isArray(favorite.folderIds)) { return favorite.folderIds; }
+    return typeof favorite.folderId === 'string' && favorite.folderId ? [favorite.folderId] : [];
+}
+
+/**
+ * Adds a favorite, or merges it into an existing one with the same `source:seq`
+ * (or, for a Yomitan-only word, the same word under its `legacySeq`).
  * Existing favorites keep their `savedAt` and folder membership; provided non-empty fields win.
  * @param {import('himotoki').SavedBlob} blob
  * @param {import('himotoki').FavoriteInput} input
@@ -88,7 +129,7 @@ function asArray(value) {
  * @throws {Error} When the favorite is new and the library is full.
  */
 export function upsertFavorite(blob, input, now) {
-    const knownFolderIds = new Set(blob.folders.map(({id}) => id));
+    const knownFolderIds = new Set(validFolders(blob).map(({id}) => id));
     const folderIds = (input.folderIds ?? []).filter((id) => knownFolderIds.has(id));
 
     /** @type {Partial<import('himotoki').Favorite>} */
@@ -100,12 +141,27 @@ export function upsertFavorite(blob, input, now) {
 
     const source = input.source || 'jitendex';
     const key = favoriteKey(source, input.seq);
-    const index = blob.favorites.findIndex((favorite) => favoriteKey(favorite.source, favorite.seq) === key);
+    const matches = (/** @type {unknown} */ favorite, /** @type {string} */ wanted) => (
+        isRecord(favorite) && favoriteKey(/** @type {string|undefined} */ (favorite.source), /** @type {string|number} */ (favorite.seq)) === wanted
+    );
+    let index = blob.favorites.findIndex((favorite) => matches(favorite, key));
+    if (index < 0 && input.legacySeq) {
+        // Saved by an earlier build under its 32-bit identity. That hash can
+        // collide, so the word itself has to match too.
+        const legacyKey = favoriteKey(source, input.legacySeq);
+        index = blob.favorites.findIndex((favorite) => (
+            matches(favorite, legacyKey) &&
+            favorite.headword === input.headword &&
+            (favorite.reading || '') === (input.reading || '')
+        ));
+    }
 
     /** @type {import('himotoki').Favorite[]} */
     let favorites;
     if (index >= 0) {
-        const existing = blob.favorites[index];
+        const existing = {...blob.favorites[index]};
+        const memberships = membershipsOf(existing);
+        delete existing.folderId;
         favorites = [...blob.favorites];
         favorites[index] = {
             ...existing,
@@ -114,7 +170,9 @@ export function upsertFavorite(blob, input, now) {
             reading: input.reading || existing.reading,
             gloss: input.gloss || existing.gloss,
             pitch: input.pitch || existing.pitch,
-            folderIds: [...new Set([...(existing.folderIds ?? []), ...folderIds])],
+            // A legacy `folderId` moves into `folderIds`: the app reads an
+            // array as the whole membership, so leaving it behind unfiled the word.
+            folderIds: [...new Set([...memberships, ...folderIds])],
         };
     } else {
         if (blob.favorites.length >= MAX_FAVORITES) {

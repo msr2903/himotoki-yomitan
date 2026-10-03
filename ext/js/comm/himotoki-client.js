@@ -16,7 +16,7 @@
  */
 
 import {readResponseJson} from '../core/json.js';
-import {createEmptySavedBlob, decodeFirestoreFields, encodeFirestoreFields, favoriteKey, toSavedBlob, upsertFavorite} from '../data/himotoki-saved-blob.js';
+import {createEmptySavedBlob, decodeFirestoreFields, encodeFirestoreFields, favoriteKey, toSavedBlob, upsertFavorite, validFavorites, validFolders} from '../data/himotoki-saved-blob.js';
 
 /**
  * Public Firebase web config for the `himotoki` project. These are identifiers, not secrets;
@@ -159,8 +159,8 @@ export class HimotokiClient {
         this._assertSessionVersion(sessionVersion);
         const savedBlob = /** @type {import('himotoki').SavedBlob} */ (blob);
         return {
-            favoriteKeys: savedBlob.favorites.map(({source, seq}) => favoriteKey(source, seq)),
-            folders: savedBlob.folders,
+            favoriteKeys: validFavorites(savedBlob).map(({source, seq}) => favoriteKey(source, seq)),
+            folders: validFolders(savedBlob),
         };
     }
 
