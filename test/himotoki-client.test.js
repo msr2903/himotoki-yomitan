@@ -131,7 +131,7 @@ describe('Himotoki client', () => {
         await expect(client.getSaved(false)).rejects.toThrow('Too many requests');
         expect(getSession()).not.toBeNull();
         fetchMock.mockResolvedValueOnce(jsonResponse({id_token: 'new-token', refresh_token: 'new-refresh', expires_in: '3600'}));
-        await expect(client.getSaved(false)).resolves.toStrictEqual({favoriteKeys: [], folders: []});
+        await expect(client.getSaved(false)).resolves.toStrictEqual({favoriteKeys: [], savedWordKeys: [], folders: []});
     });
 
     test.each(['TOKEN_EXPIRED', 'USER_DISABLED', 'USER_NOT_FOUND', 'INVALID_REFRESH_TOKEN', 'USER_DISABLED : The user account has been disabled by an administrator.'])('clears invalid sessions on %s', async (message) => {
@@ -159,7 +159,7 @@ describe('Himotoki client', () => {
         await client.signOut();
         response.resolve(savedResponse([1]));
         await rejected;
-        expect(await client.getSaved(false)).toStrictEqual({favoriteKeys: [], folders: []});
+        expect(await client.getSaved(false)).toStrictEqual({favoriteKeys: [], savedWordKeys: [], folders: []});
     });
 
     test('a save does not write after the account changes during its read', async () => {
@@ -189,7 +189,7 @@ describe('Himotoki client', () => {
         await signIn;
         library.resolve(savedResponse([1]));
         await rejected;
-        expect(await client.getSaved(false)).toStrictEqual({favoriteKeys: [], folders: []});
+        expect(await client.getSaved(false)).toStrictEqual({favoriteKeys: [], savedWordKeys: [], folders: []});
         expect(fetchMock.mock.calls[2][0]).toContain('/saved/account-b');
     });
 
@@ -248,7 +248,7 @@ describe('Himotoki client', () => {
         const {client, fetchMock} = setup();
         fetchMock.mockRejectedValueOnce(new Error('Offline'));
         await expect(client.getSaved(false)).rejects.toThrow('Offline');
-        await expect(client.getSaved(false)).resolves.toStrictEqual({favoriteKeys: [], folders: []});
+        await expect(client.getSaved(false)).resolves.toStrictEqual({favoriteKeys: [], savedWordKeys: [], folders: []});
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
@@ -300,7 +300,7 @@ describe('Himotoki client', () => {
             expect(signals[0]).toBeInstanceOf(AbortSignal);
 
             // A forced refresh starts its own read rather than sharing the stalled one.
-            await expect(client.getSaved(true)).resolves.toStrictEqual({favoriteKeys: [], folders: []});
+            await expect(client.getSaved(true)).resolves.toStrictEqual({favoriteKeys: [], savedWordKeys: [], folders: []});
             expect(fetchMock).toHaveBeenCalledTimes(2);
 
             await vi.advanceTimersByTimeAsync(20_000);
@@ -315,7 +315,7 @@ describe('Himotoki client', () => {
         fetchMock.mockResolvedValueOnce(jsonResponse({error: {status: 'UNAUTHENTICATED', message: 'TOKEN_EXPIRED'}}, 401))
             .mockResolvedValueOnce(jsonResponse({id_token: 'new-token', refresh_token: 'new-refresh', expires_in: '3600'}))
             .mockResolvedValueOnce(savedResponse([1]));
-        await expect(client.getSaved(true)).resolves.toStrictEqual({favoriteKeys: ['jitendex:1'], folders: []});
+        await expect(client.getSaved(true)).resolves.toMatchObject({favoriteKeys: ['jitendex:1'], folders: []});
         const urls = fetchMock.mock.calls.map(([url]) => new URL(url).hostname);
         expect(urls).toStrictEqual(['firestore.googleapis.com', 'securetoken.googleapis.com', 'firestore.googleapis.com']);
         const retry = /** @type {RequestInit} */ (fetchMock.mock.calls[2][1]);

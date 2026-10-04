@@ -16,8 +16,8 @@
  */
 
 import {describe, expect, test} from 'vitest';
-import {buildHimotokiFavorite, stableSeq} from '../ext/js/data/himotoki-favorite-builder.js';
-import {favoriteKey} from '../ext/js/data/himotoki-saved-blob.js';
+import {buildHimotokiFavorite, legacyStableSeq, stableSeq} from '../ext/js/data/himotoki-favorite-builder.js';
+import {createEmptySavedBlob, favoriteKey, isFavoriteSaved, savedWordKey, upsertFavorite} from '../ext/js/data/himotoki-saved-blob.js';
 
 /** @type {import('anki-templates-internal').Context} */
 const context = {
@@ -150,5 +150,106 @@ describe('Himotoki favorite builder', () => {
         };
         const entry = createTermEntry({term: '寿司', reading: 'すし', dictionary: 'Jitendex', sequence: 1358280, entries: [structuredContent]});
         expect(buildHimotokiFavorite(entry, context, options).gloss).toStrictEqual('sushi; vinegared rice');
+    });
+
+    test('a grouped entry saves the chosen headword with its own sequence and meanings (#10)', () => {
+        const entry = createTermEntry({term: '箸', reading: 'はし', dictionary: 'Jitendex', sequence: 1206590, entries: ['chopsticks']});
+        entry.headwords.push({...entry.headwords[0], index: 1, term: '橋'});
+        entry.definitions.push({...entry.definitions[0], index: 1, headwordIndices: [1], sequences: [1231930], entries: ['bridge']});
+        // Both lookups deinflect to 橋, so headword 1 is the matched one.
+        for (const headword of entry.headwords) {
+            headword.sources = headword.sources.map((source) => ({...source, deinflectedText: '橋'}));
+        }
+        const favorite = buildHimotokiFavorite(entry, context, options);
+        expect([favorite.headword, favorite.seq, favorite.gloss]).toStrictEqual(['橋', 1231930, 'bridge']);
+    });
+
+    test('two words whose old 32-bit IDs collide get different identities (#8)', () => {
+        const dictionary = 'Custom Japanese Dictionary';
+        const georgette = createTermEntry({term: 'ジョーゼット', reading: 'ジョーゼット', dictionary, sequence: 42, entries: ['georgette']});
+        const carryIn = createTermEntry({term: '運び込む', reading: 'はこびこむ', dictionary, sequence: 43, entries: ['to carry in; to bring in']});
+        // The issue's pair: one ID under the old hash.
+        expect(legacyStableSeq('ジョーゼット', 'ジョーゼット', dictionary)).toBe(legacyStableSeq('運び込む', 'はこびこむ', dictionary));
+
+        const first = buildHimotokiFavorite(georgette, context, options);
+        const second = buildHimotokiFavorite(carryIn, context, options);
+        expect(first.seq).not.toBe(second.seq);
+        expect(String(first.seq)).toMatch(/^yt_[0-9a-f]{16}$/);
+
+        let blob = createEmptySavedBlob(1);
+        blob = upsertFavorite(blob, first, 2).blob;
+        const result = upsertFavorite(blob, second, 3);
+        expect(result.added).toBe(true);
+        expect(result.blob.favorites.map((f) => f.headword)).toStrictEqual(['運び込む', 'ジョーゼット']);
+    });
+
+    test('the popup shows a word saved under its old ID as saved, but not its collision (#19 review)', () => {
+        const dictionary = 'Custom Japanese Dictionary';
+        const legacy = legacyStableSeq('ジョーゼット', 'ジョーゼット', dictionary);
+        // ジョーゼット was saved by an earlier build under the 32-bit ID.
+        const savedKeys = new Set([favoriteKey('yomitan', legacy)]);
+        const savedWordKeys = new Set([savedWordKey('yomitan', legacy, 'ジョーゼット', 'ジョーゼット')]);
+        const georgette = buildHimotokiFavorite(createTermEntry({term: 'ジョーゼット', reading: 'ジョーゼット', dictionary, sequence: 42, entries: ['georgette']}), context, options);
+        const carryIn = buildHimotokiFavorite(createTermEntry({term: '運び込む', reading: 'はこびこむ', dictionary, sequence: 43, entries: ['to carry in']}), context, options);
+        expect(carryIn.legacySeq).toBe(georgette.legacySeq);
+        expect(isFavoriteSaved(georgette, savedKeys, savedWordKeys)).toBe(true);
+        expect(isFavoriteSaved(carryIn, savedKeys, savedWordKeys)).toBe(false);
+        // Under its current ID a word is saved whatever the legacy keys say.
+        expect(isFavoriteSaved(carryIn, new Set([favoriteKey('yomitan', carryIn.seq)]), new Set())).toBe(true);
+    });
+
+    test('a word saved under its old 32-bit ID is updated, not duplicated, and a collision is not', () => {
+        const dictionary = 'Custom Japanese Dictionary';
+        const legacy = legacyStableSeq('ジョーゼット', 'ジョーゼット', dictionary);
+        let blob = createEmptySavedBlob(1);
+        blob = upsertFavorite(blob, {source: 'yomitan', seq: legacy, headword: 'ジョーゼット', reading: 'ジョーゼット', gloss: 'georgette'}, 2).blob;
+
+        const again = buildHimotokiFavorite(createTermEntry({term: 'ジョーゼット', reading: 'ジョーゼット', dictionary, sequence: 42, entries: ['georgette (fabric)']}), context, options);
+        const merged = upsertFavorite(blob, again, 3);
+        expect(merged.added).toBe(false);
+        expect(merged.blob.favorites).toHaveLength(1);
+        expect(merged.blob.favorites[0]).toMatchObject({seq: legacy, gloss: 'georgette (fabric)'});
+        expect('legacySeq' in merged.blob.favorites[0]).toBe(false);
+
+        const other = buildHimotokiFavorite(createTermEntry({term: '運び込む', reading: 'はこびこむ', dictionary, sequence: 43, entries: ['to carry in']}), context, options);
+        const added = upsertFavorite(blob, other, 4);
+        expect(added.added).toBe(true);
+        expect(added.blob.favorites.map((f) => f.headword)).toStrictEqual(['運び込む', 'ジョーゼット']);
+        expect('legacySeq' in added.blob.favorites[0]).toBe(false);
+    });
+
+    test('ruby readings are not saved as part of a structured meaning (#11)', () => {
+        /** @type {import('dictionary-data').TermGlossaryContent} */
+        const structuredContent = {
+            type: 'structured-content',
+            content: {
+                tag: 'span',
+                content: [
+                    {tag: 'ruby', content: ['新聞', {tag: 'rp', content: '('}, {tag: 'rt', content: 'しんぶん'}, {tag: 'rp', content: ')'}]},
+                    'を',
+                    {tag: 'ruby', content: ['読', {tag: 'rt', content: 'よ'}]},
+                    'む',
+                ],
+            },
+        };
+        const entry = createTermEntry({term: '購読', reading: 'こうどく', dictionary: 'Custom Dict', sequence: 1, entries: [structuredContent]});
+        expect(buildHimotokiFavorite(entry, context, options).gloss).toBe('新聞を読む');
+    });
+
+    test('keeps every numeric pitch pattern of the chosen headword, once each (#18)', () => {
+        const entry = createTermEntry({term: '打ち込む', reading: 'うちこむ', dictionary: 'Jitendex', sequence: 1, entries: ['to drive in']});
+        /**
+         * @param {number|string} positions
+         * @returns {import('dictionary').PitchAccent}
+         */
+        const pitch = (positions) => ({type: 'pitch-accent', positions, nasalPositions: [], devoicePositions: [], tags: []});
+        entry.pronunciations = /** @type {import('dictionary').TermPronunciation[]} */ (/** @type {unknown} */ ([
+            {index: 0, headwordIndex: 0, dictionary: 'A', dictionaryIndex: 0, dictionaryAlias: 'A', pronunciations: [pitch(0), pitch(3)]},
+            {index: 1, headwordIndex: 0, dictionary: 'B', dictionaryIndex: 1, dictionaryAlias: 'B', pronunciations: [pitch(3), pitch('HLLL')]},
+            {index: 2, headwordIndex: 1, dictionary: 'A', dictionaryIndex: 0, dictionaryAlias: 'A', pronunciations: [pitch(2)]},
+        ]));
+        expect(buildHimotokiFavorite(entry, context, options).pitch).toBe('0/3');
+        entry.pronunciations = [];
+        expect(buildHimotokiFavorite(entry, context, options).pitch).toBe('');
     });
 });
