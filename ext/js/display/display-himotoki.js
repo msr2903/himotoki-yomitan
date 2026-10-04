@@ -38,6 +38,8 @@ export class DisplayHimotoki {
         this._eventListeners = new EventListenerCollection();
         /** @type {Set<string>} */
         this._savedKeys = new Set();
+        /** @type {Set<string>} Favorites with a save in flight, by `source:seq`. */
+        this._savingKeys = new Set();
         /** @type {Set<string>} */
         this._savedWordKeys = new Set();
         /** @type {?import('core').TokenObject} */
@@ -146,6 +148,12 @@ export class DisplayHimotoki {
      */
     _updateButtonState(button) {
         const favorite = this._buildFavorite(Number.parseInt(button.dataset.entryIndex ?? '', 10));
+        const key = favorite === null ? null : favoriteKey(favorite.source, favorite.seq);
+        // A refresh must not re-enable a button whose save is still running.
+        if (key !== null && this._savingKeys.has(key)) {
+            this._setButtonState(button, 'saving');
+            return;
+        }
         const saved = favorite !== null && isFavoriteSaved(favorite, this._savedKeys, this._savedWordKeys);
         this._setButtonState(button, saved ? 'saved' : 'ready');
     }
@@ -192,6 +200,8 @@ export class DisplayHimotoki {
      * @param {?HTMLButtonElement} button
      */
     async _save(index, button) {
+        // Gate the save itself, not only the buttons: the hotkey stays registered.
+        if (this._options === null || !this._options.enable) { return; }
         this._hideErrorNotification(true);
         /** @type {?import('himotoki').FavoriteInput} */
         let favorite;
@@ -208,15 +218,39 @@ export class DisplayHimotoki {
             return;
         }
 
+        const key = favoriteKey(favorite.source, favorite.seq);
+        // A second press (the hotkey ignores the disabled button) waits for the first.
+        if (this._savingKeys.has(key)) { return; }
+        this._savingKeys.add(key);
         if (button !== null) { this._setButtonState(button, 'saving'); }
         try {
             await this._display.application.api.himotokiAddFavorite(favorite);
-            this._savedKeys.add(favoriteKey(favorite.source, favorite.seq));
-            if (button !== null) { this._setButtonState(button, 'saved'); }
+            this._savedKeys.add(key);
+            this._savingKeys.delete(key);
+            this._settleButtons(key, 'saved', button);
         } catch (e) {
-            if (button !== null) { this._setButtonState(button, 'error'); }
+            this._savingKeys.delete(key);
+            this._settleButtons(key, 'error', button);
             this._showError(`Couldn't save to Himotoki: ${toError(e).message}`);
         }
+    }
+
+    /**
+     * Shows a finished save on the buttons for that word. The popup may have
+     * re-rendered while it ran, so the button that started it can be gone and
+     * a new one, shown as saving, is the one to update.
+     * @param {string} key
+     * @param {'saved'|'error'} state
+     * @param {?HTMLButtonElement} origin
+     */
+    _settleButtons(key, state, origin) {
+        for (const button of this._getSaveButtons()) {
+            const favorite = this._buildFavorite(Number.parseInt(button.dataset.entryIndex ?? '', 10));
+            if (favorite !== null && favoriteKey(favorite.source, favorite.seq) === key) {
+                this._setButtonState(button, state);
+            }
+        }
+        if (origin !== null && origin.isConnected) { this._setButtonState(origin, state); }
     }
 
     /**

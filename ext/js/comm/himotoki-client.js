@@ -42,6 +42,8 @@ const TOKEN_REFRESH_MARGIN = 60_000;
 const SAVED_CACHE_MAX_AGE = 60_000;
 /** Attempts for a read-modify-write when another client writes concurrently. */
 const MAX_WRITE_ATTEMPTS = 3;
+/** Give up on a Google/Firebase request after this long, in milliseconds. */
+const REQUEST_TIMEOUT = 20_000;
 /** Firebase errors that require a fresh sign-in rather than a retry. */
 const INVALID_SESSION_ERRORS = new Set(['TOKEN_EXPIRED', 'USER_DISABLED', 'USER_NOT_FOUND', 'INVALID_REFRESH_TOKEN']);
 
@@ -139,7 +141,8 @@ export class HimotokiClient {
         }
         let blob = this._savedCache?.blob;
         if (forceRefresh || this._savedCache === null || Date.now() - this._savedCache.fetchedAt > SAVED_CACHE_MAX_AGE) {
-            if (this._savedPromise === null) {
+            // A forced refresh never joins a read that may have stalled.
+            if (this._savedPromise === null || forceRefresh) {
                 const cache = this._savedCache;
                 this._savedPromise = (async () => {
                     const {blob: savedBlob} = await this._readSavedDocument(sessionVersion);
@@ -263,7 +266,6 @@ export class HimotokiClient {
      * @param {?import('himotoki').Session} session
      */
     async _setSession(session) {
-        this._sessionPromise = Promise.resolve(session);
         await new Promise((resolve, reject) => {
             /** */
             const callback = () => {
@@ -280,6 +282,9 @@ export class HimotokiClient {
                 chrome.storage.local.set({[SESSION_STORAGE_KEY]: session}, callback);
             }
         });
+        // Only once storage has it: a failed write must not leave this
+        // context signed out while the stored account resumes after a restart.
+        this._sessionPromise = Promise.resolve(session);
     }
 
     /**
@@ -306,16 +311,19 @@ export class HimotokiClient {
     /**
      * Returns a session with an unexpired ID token. Concurrent callers share one refresh.
      * @param {number} sessionVersion
+     * @param {string} [rejectedIdToken] A token the server refused: refresh even if it looks unexpired.
      * @returns {Promise<import('himotoki').Session>}
      */
-    async _getActiveSession(sessionVersion) {
+    async _getActiveSession(sessionVersion, rejectedIdToken) {
         this._assertSessionVersion(sessionVersion);
         const session = await this._getStoredSession();
         this._assertSessionVersion(sessionVersion);
         if (session === null) {
             throw new Error('Not signed in to Himotoki. Sign in under Settings → Himotoki.');
         }
-        if (session.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN) {
+        // Another caller may already have replaced the refused token.
+        const refused = typeof rejectedIdToken === 'string' && session.idToken === rejectedIdToken;
+        if (!refused && session.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN) {
             return session;
         }
         if (this._refreshPromise === null) {
@@ -379,21 +387,52 @@ export class HimotokiClient {
     }
 
     /**
+     * Runs an authenticated Firestore request. The local expiry can't see a
+     * token the server already refused (clock drift, early revocation), so an
+     * HTTP 401 refreshes the token once and retries under the same account.
+     * @template T
+     * @param {number} sessionVersion
+     * @param {(session: import('himotoki').Session) => Promise<T>} request
+     * @returns {Promise<T>}
+     */
+    async _withSession(sessionVersion, request) {
+        const session = await this._getActiveSession(sessionVersion);
+        this._assertSessionVersion(sessionVersion);
+        try {
+            return await request(session);
+        } catch (e) {
+            this._assertSessionVersion(sessionVersion);
+            if (!(e instanceof HimotokiApiError) || e.status !== 401) { throw e; }
+        }
+        const refreshed = await this._getActiveSession(sessionVersion, session.idToken);
+        this._assertSessionVersion(sessionVersion);
+        try {
+            return await request(refreshed);
+        } catch (e) {
+            this._assertSessionVersion(sessionVersion);
+            if (e instanceof HimotokiApiError && e.status === 401) {
+                throw new Error('Himotoki did not accept your sign-in. Sign out and sign in again under Settings → Himotoki.');
+            }
+            throw e;
+        }
+    }
+
+    /**
      * @param {number} sessionVersion
      * @returns {Promise<{blob: import('himotoki').SavedBlob, updateTime: ?string}>}
      */
     async _readSavedDocument(sessionVersion) {
-        const {uid, idToken} = await this._getActiveSession(sessionVersion);
-        this._assertSessionVersion(sessionVersion);
         /** @type {import('himotoki').FirestoreDocument} */
         let document;
         try {
-            document = await this._fetchGoogleApi(this._getSavedDocumentUrl(uid), {
+            document = await this._withSession(sessionVersion, ({uid, idToken}) => this._fetchGoogleApi(this._getSavedDocumentUrl(uid), {
                 headers: {Authorization: `Bearer ${idToken}`},
-            });
+            }));
         } catch (e) {
+            // Sign-in errors (an expired refresh token) already say what happened.
+            if (!(e instanceof HimotokiApiError)) { throw e; }
             this._assertSessionVersion(sessionVersion);
-            if (e instanceof HimotokiApiError && e.status === 404) {
+            if (e.status === 404) {
                 return {blob: createEmptySavedBlob(Date.now()), updateTime: null};
             }
             throw e;
@@ -413,35 +452,34 @@ export class HimotokiClient {
      * @param {number} sessionVersion
      */
     async _writeSavedDocument(blob, updateTime, sessionVersion) {
-        const {uid, idToken} = await this._getActiveSession(sessionVersion);
-        this._assertSessionVersion(sessionVersion);
-        const url = new URL(this._getSavedDocumentUrl(uid));
-        if (updateTime === null) {
-            url.searchParams.set('currentDocument.exists', 'false');
-        } else {
-            url.searchParams.set('currentDocument.updateTime', updateTime);
-            // Preserve folders, likes, schema version, and fields introduced by newer clients.
-            url.searchParams.append('updateMask.fieldPaths', 'favorites');
-            url.searchParams.append('updateMask.fieldPaths', 'updatedAt');
-        }
         try {
-            await this._fetchGoogleApi(url.toString(), {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({fields: encodeFirestoreFields(updateTime === null ? blob : {favorites: blob.favorites, updatedAt: blob.updatedAt})}),
+            await this._withSession(sessionVersion, ({uid, idToken}) => {
+                const url = new URL(this._getSavedDocumentUrl(uid));
+                if (updateTime === null) {
+                    url.searchParams.set('currentDocument.exists', 'false');
+                } else {
+                    url.searchParams.set('currentDocument.updateTime', updateTime);
+                    // Preserve folders, likes, schema version, and fields introduced by newer clients.
+                    url.searchParams.append('updateMask.fieldPaths', 'favorites');
+                    url.searchParams.append('updateMask.fieldPaths', 'updatedAt');
+                }
+                return this._fetchGoogleApi(url.toString(), {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${idToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({fields: encodeFirestoreFields(updateTime === null ? blob : {favorites: blob.favorites, updatedAt: blob.updatedAt})}),
+                });
             });
         } catch (e) {
+            if (!(e instanceof HimotokiApiError)) { throw e; }
             this._assertSessionVersion(sessionVersion);
-            if (e instanceof HimotokiApiError) {
-                if (e.status === 409 || e.statusText === 'FAILED_PRECONDITION' || e.statusText === 'ALREADY_EXISTS' || e.statusText === 'ABORTED') {
-                    throw new HimotokiConflictError(e.message);
-                }
-                if (e.status === 403) {
-                    throw new Error('Himotoki rejected the save. Your library may be full, or your account may not have access.');
-                }
+            if (e.status === 409 || e.statusText === 'FAILED_PRECONDITION' || e.statusText === 'ALREADY_EXISTS' || e.statusText === 'ABORTED') {
+                throw new HimotokiConflictError(e.message);
+            }
+            if (e.status === 403) {
+                throw new Error('Himotoki rejected the save. Your library may be full, or your account may not have access.');
             }
             throw e;
         }
@@ -463,13 +501,29 @@ export class HimotokiClient {
      * @throws {HimotokiApiError}
      */
     async _fetchGoogleApi(url, init) {
-        const response = await fetch(url, {...init, cache: 'no-store', credentials: 'omit'});
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+        /** @type {Response} */
+        let response;
         /** @type {unknown} */
         let body = null;
         try {
-            body = await readResponseJson(response);
-        } catch {
-            // Handled below.
+            response = await fetch(url, {...init, cache: 'no-store', credentials: 'omit', signal: controller.signal});
+            try {
+                body = await readResponseJson(response);
+            } catch {
+                // Handled below (an aborted body read is reported as a timeout).
+            }
+        } catch (e) {
+            if (controller.signal.aborted) {
+                throw new Error('Himotoki did not respond. Check your connection and try again.');
+            }
+            throw e;
+        } finally {
+            clearTimeout(timer);
+        }
+        if (controller.signal.aborted && body === null) {
+            throw new Error('Himotoki did not respond. Check your connection and try again.');
         }
         if (!response.ok) {
             const {message, status} = getGoogleApiError(/** @type {import('himotoki').GoogleApiErrorResponse} */ (body));

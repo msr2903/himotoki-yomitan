@@ -39,6 +39,10 @@ export class HimotokiController {
         this._folderSelect = querySelectorNotNull(document, '#himotoki-folder');
         /** @type {string} */
         this._folderId = '';
+        /** @type {number} Bumped by every status update; a slower, older one must not overwrite it. */
+        this._statusVersion = 0;
+        /** @type {boolean} Whether the signed-in account's folders have loaded. */
+        this._foldersKnown = false;
     }
 
     /** */
@@ -104,6 +108,7 @@ export class HimotokiController {
      * @param {import('himotoki').Status} status
      */
     async _applyStatus({signInAvailable, signedIn, email, displayName, redirectUrl}) {
+        const version = ++this._statusVersion;
         this._signInButton.hidden = signedIn || !signInAvailable;
         this._signOutButton.hidden = !signedIn;
         this._signInUnavailable.hidden = signedIn || signInAvailable;
@@ -111,7 +116,7 @@ export class HimotokiController {
 
         if (!signedIn) {
             this._accountStatus.textContent = 'Not signed in. Sign in with the Google account you use on Himotoki to save words in one click.';
-            this._setFolders([]);
+            this._setFolders([], false);
             return;
         }
 
@@ -119,17 +124,22 @@ export class HimotokiController {
         this._accountStatus.textContent = `Signed in as ${name}.`;
         try {
             const {favoriteKeys, folders} = await this._settingsController.application.api.himotokiGetSaved(true);
+            // Signed out (or in as someone else) while this account's words loaded.
+            if (version !== this._statusVersion) { return; }
             this._accountStatus.textContent = `Signed in as ${name} · ${favoriteKeys.length} saved word${favoriteKeys.length === 1 ? '' : 's'}.`;
-            this._setFolders(folders);
+            this._setFolders(folders, true);
         } catch (e) {
+            if (version !== this._statusVersion) { return; }
             this._accountStatus.textContent = `Signed in as ${name}, but your saved words couldn't be loaded: ${toError(e).message}`;
         }
     }
 
     /**
      * @param {import('himotoki').Folder[]} folders
+     * @param {boolean} known Whether these are the signed-in account's folders.
      */
-    _setFolders(folders) {
+    _setFolders(folders, known) {
+        this._foldersKnown = known;
         const fragment = document.createDocumentFragment();
         fragment.appendChild(this._createFolderOption('', 'Unfiled'));
         for (const {id, name} of folders) {
@@ -143,11 +153,19 @@ export class HimotokiController {
 
     /**
      * Keeps a folder chosen while signed in visible while signed out or before folders load.
+     * Once the account's folders are known, a choice that isn't among them (deleted, or another
+     * account's) is shown as missing and can't be picked again: saves file those words as Unfiled.
      */
     _updateFolderSelectValue() {
         const folderId = this._folderId;
         if (folderId.length > 0 && this._folderSelect.querySelector(`option[value="${CSS.escape(folderId)}"]`) === null) {
-            this._folderSelect.appendChild(this._createFolderOption(folderId, `Folder ${folderId}`));
+            const option = this._foldersKnown ?
+                this._createFolderOption(folderId, 'Missing folder · words are saved as Unfiled') :
+                this._createFolderOption(folderId, `Folder ${folderId}`);
+            option.disabled = this._foldersKnown;
+            this._folderSelect.appendChild(option);
+            // Disabled while there are no folders; the missing choice still has to show.
+            if (this._foldersKnown) { this._folderSelect.disabled = false; }
         }
         this._folderSelect.value = folderId;
     }
